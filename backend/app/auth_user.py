@@ -41,6 +41,19 @@ def get_current_user(
         ) from exc
 
     try:
+        # Decode token without verification to inspect issuer/audience for debugging
+        try:
+            unverified = jwt.decode(credentials.credentials, options={"verify_signature": False})
+            logger.info(
+                "Incoming token - issuer (iss): %s, audience (aud): %s, expected issuer: %s, expected audiences: %s",
+                unverified.get("iss"),
+                unverified.get("aud"),
+                settings.azure_issuer,
+                settings.azure_allowed_audiences,
+            )
+        except Exception as debug_exc:
+            logger.warning("Failed to decode token for debugging: %s", debug_exc)
+
         jwk_client = PyJWKClient(settings.azure_jwks_uri)
         signing_key = jwk_client.get_signing_key_from_jwt(credentials.credentials)
         payload = jwt.decode(
@@ -48,9 +61,21 @@ def get_current_user(
             signing_key.key,
             algorithms=["RS256"],
             audience=settings.azure_allowed_audiences,
-            issuer=settings.azure_issuer,
-            options={"verify_exp": True, "verify_aud": True, "verify_iss": True},
+            options={"verify_exp": True, "verify_aud": True, "verify_iss": False},
         )
+        
+        # In Azure AD, access tokens can be v1.0 or v2.0 depending on the target resource app registration settings.
+        # v1.0 tokens have issuer: https://sts.windows.net/{tenant_id}/
+        # v2.0 tokens have issuer: https://login.microsoftonline.com/{tenant_id}/v2.0
+        token_iss = payload.get("iss")
+        allowed_issuers = [
+            settings.azure_issuer,
+            f"https://sts.windows.net/{settings.azure_tenant_id}/",
+            f"https://sts.windows.net/{settings.azure_tenant_id}",
+        ]
+        if token_iss not in allowed_issuers:
+            raise InvalidTokenError(f"Invalid issuer: {token_iss}")
+
         user_id = payload.get("oid") or payload.get("sub", "unknown")
         logger.info("User authenticated: %s", user_id)
     except InvalidTokenError as exc:
@@ -130,6 +155,23 @@ def get_user_snowflake_connection(user_token: str) -> Any:
 
     try:
         sf_token = get_user_snowflake_token(user_token)
+        
+        # Decode token without verification to inspect Snowflake token claims for debugging
+        try:
+            sf_unverified = jwt.decode(sf_token, options={"verify_signature": False})
+            logger.info(
+                "Exchanged Snowflake token claims - iss: %s, aud: %s, upn: %s, email: %s, unique_name: %s, sub: %s, scp: %s, roles: %s",
+                sf_unverified.get("iss"),
+                sf_unverified.get("aud"),
+                sf_unverified.get("upn"),
+                sf_unverified.get("email"),
+                sf_unverified.get("unique_name"),
+                sf_unverified.get("sub"),
+                sf_unverified.get("scp"),
+                sf_unverified.get("roles"),
+            )
+        except Exception as debug_exc:
+            logger.warning("Failed to decode Snowflake token for debugging: %s", debug_exc)
 
         connection_params: Dict[str, Any] = {
             "account": settings.snowflake_account,

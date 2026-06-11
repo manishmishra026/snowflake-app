@@ -23,7 +23,20 @@ class UserAuthSettings:
         self.azure_jwks_uri = (
             f"https://login.microsoftonline.com/{self.azure_tenant_id}/discovery/v2.0/keys"
         )
-        self.azure_allowed_audiences = (self.azure_audience, self.azure_client_id)
+        
+        # Build allowed audiences, supporting both raw and api:// prefixed formats
+        allowed = {self.azure_audience, self.azure_client_id}
+        if self.azure_audience.startswith("api://"):
+            allowed.add(self.azure_audience[6:])
+        else:
+            allowed.add(f"api://{self.azure_audience}")
+            
+        if self.azure_client_id.startswith("api://"):
+            allowed.add(self.azure_client_id[6:])
+        else:
+            allowed.add(f"api://{self.azure_client_id}")
+            
+        self.azure_allowed_audiences = tuple(allowed)
 
     @staticmethod
     def _get_required(key: str) -> str:

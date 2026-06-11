@@ -43,7 +43,7 @@ export const loginRequest = {
     'openid',
     'profile',
     'email',
-    'api://28c90a4e-4a96-4f78-ab0e-171bd1a984ba/user_impersonation'
+    'api://89a80661-cf8b-4e10-b3f4-b2b06be53a81/user_impersonation'
   ],
 };
 

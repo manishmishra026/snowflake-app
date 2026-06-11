@@ -20,7 +20,7 @@ from app.config import (
     TOKEN_REFRESH_TIMEOUT,
 )
 
-load_dotenv()
+load_dotenv(override=True)
 
 logging.basicConfig(
     level=logging.INFO,
