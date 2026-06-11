@@ -1,0 +1,35 @@
+# =============================================================================
+# Python (backend)
+# =============================================================================
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment files
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# =============================================================================
+# Node / Angular (frontend)
+# =============================================================================
+node_modules/
+frontend/snowflake-webapp/dist/
+frontend/snowflake-webapp/.angular/
+
+# =============================================================================
+# IDE / OS
+# =============================================================================
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

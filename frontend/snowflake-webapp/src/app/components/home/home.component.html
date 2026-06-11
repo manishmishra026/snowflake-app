@@ -1,0 +1,122 @@
+<div class="container">
+  <!-- Header Section -->
+  <header class="header">
+    <div class="logo">
+      <h1>Snowflake Tables API</h1>
+    </div>
+    <div class="auth-section">
+      <ng-container *ngIf="isLoggedIn; else notLoggedIn">
+        <span class="user-name">👤 {{ userName }}</span>
+        <button class="btn btn-logout" (click)="logout()">Logout</button>
+      </ng-container>
+      <ng-template #notLoggedIn>
+        <button class="btn btn-login" (click)="login()">Login with Azure AD</button>
+      </ng-template>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Welcome Section -->
+    <section class="welcome">
+      <h2>Welcome to Snowflake Tables Browser</h2>
+      <p>
+        This application demonstrates two ways to query Snowflake tables:
+      </p>
+      <div class="description">
+        <div class="flow-desc">
+          <h3>1️⃣ Service Principal Flow</h3>
+          <p>
+            Query tables using the application's service principal credentials.
+            No authentication required.
+          </p>
+        </div>
+        <div class="flow-desc">
+          <h3>2️⃣ User Authentication Flow (OBO)</h3>
+          <p>
+            Query tables using your own Azure AD credentials. Uses on-behalf-of
+            token exchange. Must be logged in.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Action Buttons Section -->
+    <section class="actions">
+      <div class="button-group">
+        <button
+          class="btn btn-primary"
+          (click)="fetchTablesByServicePrincipal()"
+          [disabled]="loading"
+        >
+          {{ loading && currentFlow === 'service-principal'
+            ? '⏳ Loading...'
+            : '📋 Get Tables (Service Principal)' }}
+        </button>
+
+        <button
+          class="btn btn-secondary"
+          (click)="fetchTablesByUserAuth()"
+          [disabled]="!isLoggedIn || loading"
+          [title]="
+            !isLoggedIn ? 'Please login first' : 'Query as authenticated user'
+          "
+        >
+          {{ loading && currentFlow === 'user-auth'
+            ? '⏳ Loading...'
+            : '👤 Get Tables (User Auth)' }}
+        </button>
+      </div>
+    </section>
+
+    <!-- Error Section -->
+    <section *ngIf="error" class="error-section">
+      <div class="error-box">
+        <strong>❌ Error:</strong>
+        <p>{{ error }}</p>
+      </div>
+    </section>
+
+    <!-- Results Section -->
+    <section *ngIf="tablesData" class="results">
+      <div class="results-header">
+        <h3>📊 Results</h3>
+        <span class="flow-badge">{{ getFlowName() }}</span>
+      </div>
+
+      <div class="results-info">
+        <p>
+          <strong>Total Tables:</strong> {{ tablesData.count }}
+        </p>
+      </div>
+
+      <div class="tables-container">
+        <table class="tables-table" *ngIf="tablesData.tables.length > 0">
+          <thead>
+            <tr>
+              <th>Schema</th>
+              <th>Table Name</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr *ngFor="let table of tablesData.tables">
+              <td>{{ table.schema }}</td>
+              <td>{{ table.name }}</td>
+            </tr>
+          </tbody>
+        </table>
+        <div *ngIf="tablesData.tables.length === 0" class="no-data">
+          <p>No tables found or no access to any tables.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>
+      Snowflake Tables API | Angular + Azure AD MSAL | Backend:
+      <code>FastAPI + Snowflake</code>
+    </p>
+  </footer>
+</div>
