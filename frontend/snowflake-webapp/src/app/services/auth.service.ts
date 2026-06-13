@@ -1,10 +1,9 @@
-import { Injectable, OnDestroy } from '@angular/core';
-import { MsalService, MsalBroadcastService } from '@azure/msal-angular';
+import { Inject, Injectable, OnDestroy } from '@angular/core';
+import { MsalService, MsalBroadcastService, MSAL_GUARD_CONFIG, MsalGuardConfiguration } from '@azure/msal-angular';
 import { AccountInfo, AuthenticationResult, EventMessage, EventType } from '@azure/msal-browser';
 import { BehaviorSubject, Subject } from 'rxjs';
 import { filter, takeUntil } from 'rxjs/operators';
 import { firstValueFrom } from 'rxjs';
-import { loginRequest } from '../config/auth.config';
 
 @Injectable({
   providedIn: 'root',
@@ -17,7 +16,8 @@ export class AuthService implements OnDestroy {
 
   constructor(
     private msalService: MsalService,
-    private msalBroadcast: MsalBroadcastService
+    private msalBroadcast: MsalBroadcastService,
+    @Inject(MSAL_GUARD_CONFIG) private msalGuardConfig: MsalGuardConfiguration
   ) {
     this.initializeAuth();
   }
@@ -68,8 +68,17 @@ export class AuthService implements OnDestroy {
     });
   }
 
+  private getGuardAuthRequest(): any {
+    const authReq = this.msalGuardConfig.authRequest;
+    if (typeof authReq === 'function') {
+      return authReq(this.msalService, {} as any);
+    }
+    return authReq;
+  }
+
   login(): void {
-    this.msalService.loginRedirect(loginRequest);
+    const req = this.getGuardAuthRequest();
+    this.msalService.loginRedirect(req);
   }
 
   logout(): void {
@@ -81,9 +90,10 @@ export class AuthService implements OnDestroy {
     if (accounts.length === 0) return null;
 
     try {
+      const req = this.getGuardAuthRequest();
       const result = await firstValueFrom(
         this.msalService.acquireTokenSilent({
-          scopes: loginRequest.scopes,
+          scopes: req?.scopes || [],
           account: accounts[0],
         })
       );

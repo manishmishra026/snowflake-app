@@ -2,57 +2,82 @@ import {
   ApplicationConfig,
   provideBrowserGlobalErrorListeners,
   importProvidersFrom,
+  APP_INITIALIZER,
+  ErrorHandler
 } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import {
   provideHttpClient,
-  withInterceptorsFromDi,
-  HTTP_INTERCEPTORS,
+  withInterceptorsFromDi
 } from '@angular/common/http';
 import { provideAnimations } from '@angular/platform-browser/animations';
 import {
   MSAL_INSTANCE,
   MSAL_GUARD_CONFIG,
-  MSAL_INTERCEPTOR_CONFIG,
   MsalGuardConfiguration,
-  MsalInterceptorConfiguration,
   MsalModule,
-  MsalInterceptor,
   MsalService,
   MsalGuard,
   MsalBroadcastService,
 } from '@azure/msal-angular';
 import { PublicClientApplication, InteractionType } from '@azure/msal-browser';
-import { msalConfig, loginRequest, apiConfig } from './config/auth.config';
 import { routes } from './app.routes';
+import { ApiService } from './services/api.service';
+import { AppInsightsService } from './core/services/app-insights.service';
+import { AppInsightsErrorHandler } from './core/handlers/error.handler';
 
-export function msalGuardConfigFactory(): MsalGuardConfiguration {
+export function msalGuardConfigFactory(apiService: ApiService): MsalGuardConfiguration {
+  const config = apiService.getCachedConfig();
   return {
     interactionType: InteractionType.Redirect,
-    authRequest: loginRequest,
+    authRequest: {
+      scopes: config?.scopes || []
+    },
     loginFailedRoute: '/login-failed',
   };
 }
 
-export function msalInterceptorConfigFactory(): MsalInterceptorConfiguration {
-  const protectedResourceMap = new Map<string, Array<string> | null>();
-  protectedResourceMap.set(
-    `${apiConfig.backendUrl}${apiConfig.endpoints.tablesUserAuth}`,
-    ['api://89a80661-cf8b-4e10-b3f4-b2b06be53a81/user_impersonation']
-  );
-  protectedResourceMap.set(
-    `${apiConfig.backendUrl}/table-data-as-user`,
-    ['api://89a80661-cf8b-4e10-b3f4-b2b06be53a81/user_impersonation']
-  );
-
-  return {
-    interactionType: InteractionType.Redirect,
-    protectedResourceMap,
-  };
+export function msalInstanceFactory(apiService: ApiService): PublicClientApplication {
+  const config = apiService.getCachedConfig();
+  const clientId = config?.client_id || '00000000-0000-0000-0000-000000000000';
+  const tenantId = config?.tenant_id || '00000000-0000-0000-0000-000000000000';
+  return new PublicClientApplication({
+    auth: {
+      clientId: clientId,
+      authority: `https://login.microsoftonline.com/${tenantId}`,
+      redirectUri: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4200',
+      postLogoutRedirectUri: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4200',
+    },
+    cache: {
+      cacheLocation: 'localStorage',
+    }
+  });
 }
 
-export function msalInstanceFactory(): PublicClientApplication {
-  return new PublicClientApplication(msalConfig);
+/**
+ * Bootstraps the application config, loading backend settings and
+ * initializing Application Insights before the application loads.
+ */
+export function initializeApp(
+  apiService: ApiService,
+  appInsightsService: AppInsightsService
+) {
+  return () => {
+    return new Promise<void>((resolve) => {
+      apiService.getClientConfig().subscribe({
+        next: (config) => {
+          if (config && config.app_insights_connection_string) {
+            appInsightsService.init(config.app_insights_connection_string);
+          }
+          resolve();
+        },
+        error: (err) => {
+          console.error('Failed to load client config on startup:', err);
+          resolve(); // Resolve to allow app to start in fallback mode
+        }
+      });
+    });
+  };
 }
 
 export const appConfig: ApplicationConfig = {
@@ -68,19 +93,22 @@ export const appConfig: ApplicationConfig = {
     {
       provide: MSAL_INSTANCE,
       useFactory: msalInstanceFactory,
+      deps: [ApiService]
     },
     {
       provide: MSAL_GUARD_CONFIG,
       useFactory: msalGuardConfigFactory,
+      deps: [ApiService]
     },
     {
-      provide: MSAL_INTERCEPTOR_CONFIG,
-      useFactory: msalInterceptorConfigFactory,
+      provide: APP_INITIALIZER,
+      useFactory: initializeApp,
+      deps: [ApiService, AppInsightsService],
+      multi: true
     },
     {
-      provide: HTTP_INTERCEPTORS,
-      useClass: MsalInterceptor,
-      multi: true,
-    },
+      provide: ErrorHandler,
+      useClass: AppInsightsErrorHandler
+    }
   ],
 };

@@ -26,30 +26,16 @@ cd frontend/snowflake-webapp
 npm install
 ```
 
-### 2. Configure Azure AD
+### 2. Configure Frontend Environment
 
-Edit [src/app/config/auth.config.ts](src/app/config/auth.config.ts):
+All Azure AD MSAL values (Client ID, Tenant ID, Scopes) and Application Insights parameters are loaded **locally** by the frontend from `public/assets/config/config.json` on startup. This ensures that the frontend can bootstrap and configure MSAL before calling the protected backend API.
 
-```typescript
-export const msalConfig: Configuration = {
-  auth: {
-    clientId: 'YOUR_CLIENT_ID',           // ← Replace with your App Registration ID
-    authority: 'https://login.microsoftonline.com/YOUR_TENANT_ID', // ← Replace with your Tenant ID
-    redirectUri: 'http://localhost:4200',
-    postLogoutRedirectUri: 'http://localhost:4200',
-  },
-  ...
-};
-```
-
-**How to find these values:**
-
-1. Go to [Azure Portal](https://portal.azure.com)
-2. Search for "App registrations"
-3. Click on your application
-4. Copy:
-   - **Application (Client) ID** → Use as `clientId`
-   - **Directory (Tenant) ID** → Use as `YOUR_TENANT_ID` in authority URL
+To configure these parameters, edit or replace the static configuration file `public/assets/config/config.json` (using `config.json.example` as a template):
+- `client_id`: Azure AD Client ID (for MSAL frontend user authentication)
+- `tenant_id`: Azure AD Tenant ID (for MSAL frontend login authority)
+- `scopes`: Scopes to request (e.g. `openid`, `profile`, `email`, and `api://{client_id}/user_impersonation`)
+- `auth_flow`: Active authentication flow (e.g. `service-principal`, `user-auth`, `service-account`)
+- `app_insights_connection_string`: Azure Application Insights connection string for frontend telemetry logging
 
 ### 3. Backend Configuration
 
@@ -82,8 +68,6 @@ The application will be available at `http://localhost:4200`
 
 ```
 src/app/
-├── config/
-│   └── auth.config.ts          # Azure AD and API configuration
 ├── services/
 │   ├── auth.service.ts         # Azure AD authentication (MSAL)
 │   └── api.service.ts          # Backend API calls
@@ -100,25 +84,10 @@ src/app/
 
 ## Using the Application
 
-### Login
-1. Click **"Login with Azure AD"** button
-2. You'll be redirected to Azure AD login
-3. Enter your credentials
-4. You'll be redirected back to the application
-5. Your name will be displayed in the header
-
-### Query Tables - Service Principal Flow
-1. Click **"📋 Get Tables (Service Principal)"**
-2. Tables are fetched using the backend's service principal credentials
-3. No user token required
-4. Results show all tables available to the service principal
-
-### Query Tables - User Auth Flow
-1. **Must be logged in** (click login first)
-2. Click **"👤 Get Tables (User Auth)"**
-3. Your Azure AD token is exchanged for a Snowflake token (OBO flow)
-4. Results show only tables you have permission to access
-5. Snowflake audit logs show query was executed as your user
+### Login & Query Tables
+1. **Sign In**: Click **"Login with Azure AD"** button and enter your credentials.
+2. **Retrieve Tables**: Once signed in, click **"📋 Fetch Database Tables"**. The frontend calls the backend API `/tables`. The backend determines how to connect to Snowflake based on the active `SNOWFLAKE_AUTH_FLOW` configured in `.env` (service-account, service-principal, or user-auth OBO).
+3. **View Table Data**: Click on any table card to view columns and records dynamically fetched from `/tables/{table_name}/data`.
 
 ## API Endpoints
 
@@ -127,45 +96,34 @@ The frontend calls these backend endpoints:
 | Endpoint | Method | Auth | Purpose |
 |----------|--------|------|---------|
 | `/health` | GET | None | Health check |
-| `/tables` | GET | None | List tables (service principal) |
-| `/tables-as-user` | GET | Bearer | List tables (user auth with OBO) |
+| `/tables` | GET | Bearer (Optional) | List Snowflake tables dynamically |
+| `/tables/{table_name}/data` | GET | Bearer (Optional) | Fetch dynamic columns and records for a table |
 
 ### Headers
 
-**For service principal endpoint (`/tables`):**
+If the user is logged into the frontend, requests will automatically include the `Authorization` header containing the user's Entra ID Bearer token:
 ```
-GET http://localhost:8000/tables
+Authorization: Bearer <entra_id_token>
 ```
-
-**For user endpoint (`/tables-as-user`):**
-```
-GET http://localhost:8000/tables-as-user
-Authorization: Bearer <user_azure_ad_token>
-```
-
-The frontend automatically handles adding the bearer token using the `ApiService`.
+If the backend is set to `user-auth` flow, it will exchange this token to query Snowflake on behalf of the user. Otherwise, the backend ignores it and queries using service-account or service-principal credentials.
 
 ## Environment Configuration
 
-### Frontend (`src/app/config/auth.config.ts`)
+### Frontend (`public/assets/config/config.json`)
 
-```typescript
-export const msalConfig: Configuration = {
-  auth: {
-    clientId: 'YOUR_CLIENT_ID',
-    authority: 'https://login.microsoftonline.com/YOUR_TENANT_ID',
-    redirectUri: 'http://localhost:4200',
-  },
-  ...
-};
-
-export const apiConfig = {
-  backendUrl: 'http://localhost:8000',
-  endpoints: {
-    tablesServicePrincipal: '/tables',
-    tablesUserAuth: '/tables-as-user',
-  },
-};
+```json
+{
+  "app_insights_connection_string": "InstrumentationKey=your-guid",
+  "client_id": "your-azure-ad-client-id",
+  "tenant_id": "your-azure-ad-tenant-id",
+  "scopes": [
+    "openid",
+    "profile",
+    "email",
+    "api://your-azure-ad-client-id/user_impersonation"
+  ],
+  "backend_url": "http://localhost:8000"
+}
 ```
 
 ### Backend (`.env`)

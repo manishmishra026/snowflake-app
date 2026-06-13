@@ -1,0 +1,12 @@
+{
+  "app_insights_connection_string": "InstrumentationKey=your-guid;IngestionEndpoint=https://...",
+  "client_id": "your-azure-ad-client-id",
+  "tenant_id": "your-azure-ad-tenant-id",
+  "scopes": [
+    "openid",
+    "profile",
+    "email",
+    "api://your-azure-ad-client-id/user_impersonation"
+  ],
+  "backend_url": "https://api-dev.contoso.com"
+}

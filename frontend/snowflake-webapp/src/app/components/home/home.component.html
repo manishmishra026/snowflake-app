@@ -2,7 +2,7 @@
   <!-- Header Section -->
   <header class="header">
     <div class="logo">
-      <h1>Snowflake Tables API</h1>
+      <h1>Snowflake Tables Browser</h1>
     </div>
     <div class="auth-section">
       <ng-container *ngIf="isLoggedIn; else notLoggedIn">
@@ -19,79 +19,36 @@
   <main class="main-content">
     <!-- Welcome Section -->
     <section class="welcome">
-      <h2>Welcome to Snowflake Tables Browser</h2>
+      <h2>Database Tables Dashboard</h2>
       <p>
-        This application demonstrates three ways to query Snowflake tables:
+        Query tables and view database rows dynamically from Snowflake.
       </p>
-      <div class="description">
-        <div class="flow-desc">
-          <h3>1️⃣ Service Principal Flow</h3>
-          <p>
-            Query tables using the application's service principal credentials.
-            No authentication required.
-          </p>
-        </div>
-        <div class="flow-desc">
-          <h3>2️⃣ User Authentication Flow (OBO)</h3>
-          <p>
-            Query tables using your own Azure AD credentials. Uses on-behalf-of
-            token exchange. Must be logged in.
-          </p>
-        </div>
-        <div class="flow-desc">
-          <h3>3️⃣ Service Account Flow</h3>
-          <p>
-            Query tables using a direct database user (webapp_user) and password.
-            No client authentication required.
-          </p>
-        </div>
+
+      <div *ngIf="!isLoggedIn" class="login-prompt">
+        <p>🔒 Please sign in with Azure AD to unlock access to tables and query data.</p>
+        <button class="btn btn-primary" (click)="login()">Sign In Now</button>
       </div>
     </section>
 
-    <!-- Action Buttons Section -->
-    <section class="actions">
-      <div class="button-group">
+    <!-- Action Section -->
+    <section class="actions" *ngIf="isLoggedIn">
+      <div class="action-header">
         <button
-          class="btn btn-primary"
-          (click)="fetchTablesByServicePrincipal()"
+          class="btn btn-primary btn-large"
+          (click)="fetchTables()"
           [disabled]="loading"
         >
-          {{ loading && currentFlow === 'service-principal'
-            ? '⏳ Loading...'
-            : '📋 Get Tables (Service Principal)' }}
-        </button>
-
-        <button
-          class="btn btn-secondary"
-          (click)="fetchTablesByUserAuth()"
-          [disabled]="!isLoggedIn || loading"
-          [title]="
-            !isLoggedIn ? 'Please login first' : 'Query as authenticated user'
-          "
-        >
-          {{ loading && currentFlow === 'user-auth'
-            ? '⏳ Loading...'
-            : '👤 Get Tables (User Auth)' }}
-        </button>
-
-        <button
-          class="btn btn-success"
-          (click)="fetchTablesByServiceAccount()"
-          [disabled]="loading"
-        >
-          {{ loading && currentFlow === 'service-account'
-            ? '⏳ Loading...'
-            : '⚙️ Get Tables (Service Account)' }}
+          {{ loading ? '⏳ Querying Snowflake...' : '📋 Fetch Database Tables' }}
         </button>
       </div>
 
       <!-- Route Navigation Links -->
       <div class="navigation-group" *ngIf="isLoggedIn" style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center;">
-        <a *ngIf="hasRole('admins') || hasRole('admin')" routerLink="/admin" class="btn" style="background: #e74c3c; color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
-          🛡️ Open Admin Page
+        <a *ngIf="hasRole('admins') || hasRole('admin')" routerLink="/admin" class="btn btn-nav btn-admin">
+          🛡️ Open Admin Portal
         </a>
-        <a *ngIf="hasRole('readers') || hasRole('reader')" routerLink="/reader" class="btn" style="background: #3498db; color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
-          📖 Open Reader Page
+        <a *ngIf="hasRole('readers') || hasRole('reader')" routerLink="/reader" class="btn btn-nav btn-reader">
+          📖 Open Reader Portal
         </a>
       </div>
     </section>
@@ -107,43 +64,41 @@
     <!-- Results Section -->
     <section *ngIf="tablesData" class="results">
       <div class="results-header">
-        <h3>📊 Results</h3>
-        <span class="flow-badge">{{ getFlowName() }}</span>
+        <h3>📊 Available Schema Tables</h3>
+        <span class="count-badge">{{ tablesData.count }} tables</span>
       </div>
 
-      <div class="results-info">
-        <p>
-          <strong>Total Tables:</strong> {{ tablesData.count }}
-        </p>
-      </div>
-
-      <div class="tables-container">
-        <table class="tables-table" *ngIf="tablesData.tables.length > 0">
-          <thead>
-            <tr>
-              <th>Schema</th>
-              <th>Table Name</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let table of tablesData.tables">
-              <td>{{ table.schema }}</td>
-              <td>{{ table.name }}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div *ngIf="tablesData.tables.length === 0" class="no-data">
-          <p>No tables found or no access to any tables.</p>
+      <div class="tables-grid">
+        <div 
+          *ngFor="let table of tablesData.tables" 
+          class="table-item-card" 
+          [class.item-active]="selectedTable === table.name"
+          (click)="viewTableData(table.name)">
+          <span class="table-icon">📁</span>
+          <div class="table-info">
+            <span class="table-name">{{ table.name }}</span>
+            <span class="table-schema">Schema: {{ table.schema }}</span>
+          </div>
+          <span class="arrow-indicator">➔</span>
         </div>
       </div>
+
+      <div *ngIf="tablesData.tables.length === 0" class="no-data">
+        <p>No tables discovered in this schema.</p>
+      </div>
+    </section>
+
+    <!-- Dynamic Table Data Section -->
+    <section *ngIf="selectedTable" class="data-detail-section">
+      <app-table-viewer [tableName]="selectedTable"></app-table-viewer>
     </section>
   </main>
 
   <!-- Footer -->
   <footer class="footer">
     <p>
-      Snowflake Tables API | Angular + Azure AD MSAL | Backend:
-      <code>FastAPI + Snowflake</code>
+      Snowflake Production SPA | Dynamic Configuration & Routing | Telemetry: 
+      <code>Azure Application Insights</code>
     </p>
   </footer>
 </div>

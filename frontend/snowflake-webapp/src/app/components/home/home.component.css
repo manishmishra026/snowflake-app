@@ -378,3 +378,120 @@
     padding: 0.5rem;
   }
 }
+
+.badge-flow {
+  background: #f0f4ff;
+  color: #667eea;
+  padding: 0.25rem 0.75rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  border: 1px solid #d2daff;
+}
+
+.login-prompt {
+  background: #fff9db;
+  border: 1px solid #ffe3e3;
+  padding: 1.5rem;
+  border-radius: 6px;
+  text-align: center;
+  color: #8f6b00;
+  margin-top: 1rem;
+}
+
+.login-prompt p {
+  margin-bottom: 1rem;
+  font-weight: 600;
+}
+
+.tables-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.25rem;
+  margin-top: 1.25rem;
+}
+
+.table-item-card {
+  background: #fdfdfd;
+  border: 1px solid #e1e8ed;
+  border-radius: 6px;
+  padding: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.table-item-card:hover {
+  background: #f5f8fa;
+  border-color: #667eea;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0,0,0,0.05);
+}
+
+.item-active {
+  background: #f0f4ff;
+  border-color: #667eea;
+  box-shadow: 0 4px 10px rgba(102,126,234,0.1);
+}
+
+.table-icon {
+  font-size: 1.8rem;
+}
+
+.table-info {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.table-name {
+  font-weight: 600;
+  color: #2c3e50;
+  font-size: 1.05rem;
+}
+
+.table-schema {
+  font-size: 0.85rem;
+  color: #7f8c8d;
+}
+
+.arrow-indicator {
+  color: #bdc3c7;
+  font-weight: bold;
+}
+
+.table-item-card:hover .arrow-indicator,
+.item-active .arrow-indicator {
+  color: #667eea;
+}
+
+.btn-large {
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+  width: 100%;
+}
+
+.btn-nav {
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+
+.btn-admin {
+  background: #e74c3c;
+  color: white;
+}
+
+.btn-admin:hover {
+  background: #c0392b;
+}
+
+.btn-reader {
+  background: #3498db;
+  color: white;
+}
+
+.btn-reader:hover {
+  background: #2980b9;
+}

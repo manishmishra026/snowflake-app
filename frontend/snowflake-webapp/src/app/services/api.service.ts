@@ -1,8 +1,7 @@
-import { Injectable } from '@angular/core';
+import { Injectable, Injector } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
-import { Observable, from } from 'rxjs';
-import { switchMap } from 'rxjs/operators';
-import { apiConfig } from '../config/auth.config';
+import { Observable, from, of } from 'rxjs';
+import { switchMap, tap } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 
 export interface TableInfo {
@@ -15,97 +14,104 @@ export interface TablesResponse {
   count: number;
 }
 
+export interface ClientConfigResponse {
+  app_insights_connection_string: string;
+  client_id: string;
+  tenant_id: string;
+  scopes: string[];
+  backend_url: string;
+}
+
+export interface TableDataResponse {
+  success: boolean;
+  table_name: string;
+  data: any[] | null;
+  columns: string[] | null;
+  error: string | null;
+}
+
 @Injectable({
   providedIn: 'root',
 })
 export class ApiService {
+  private clientConfig: ClientConfigResponse | null = null;
+
+  private authService?: AuthService;
+
   constructor(
     private http: HttpClient,
-    private authService: AuthService
+    private injector: Injector
   ) {}
 
-  /**
-   * Call /tables endpoint (Service Principal flow)
-   * No authentication needed
-   */
-  listTablesByServicePrincipal(): Observable<TablesResponse> {
-    const url = `${apiConfig.backendUrl}${apiConfig.endpoints.tablesServicePrincipal}`;
-    return this.http.get<TablesResponse>(url);
+  private getAuthService(): AuthService {
+    if (!this.authService) {
+      this.authService = this.injector.get(AuthService);
+    }
+    return this.authService;
+  }
+
+  getCachedConfig(): ClientConfigResponse | null {
+    return this.clientConfig;
   }
 
   /**
-   * Call /tables-as-user endpoint (User Authentication flow with OBO)
-   * Requires valid Azure AD bearer token
+   * Fetch dynamic configurations from backend.
    */
-  listTablesByUserAuth(): Observable<TablesResponse> {
-    const url = `${apiConfig.backendUrl}${apiConfig.endpoints.tablesUserAuth}`;
-
-    // Get access token and add it to the request
-    return from(this.authService.getAccessToken()).pipe(
-      switchMap((token) => {
-        if (!token) {
-          throw new Error('Unable to acquire access token');
-        }
-
-        const headers = new HttpHeaders({
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        });
-
-        return this.http.get<TablesResponse>(url, { headers });
+  getClientConfig(): Observable<ClientConfigResponse> {
+    if (this.clientConfig) {
+      return of(this.clientConfig);
+    }
+    const url = '/assets/config/config.json';
+    return this.http.get<ClientConfigResponse>(url).pipe(
+      tap((config) => {
+        this.clientConfig = config;
       })
     );
   }
 
   /**
-   * Call /table-data-as-user endpoint to fetch select results from both tables
-   * Requires valid Azure AD bearer token
+   * Internal helper to attach auth headers if user is authenticated.
    */
-  listTableDataByUserAuth(): Observable<TableDataResponse> {
-    const url = `${apiConfig.backendUrl}/table-data-as-user`;
-
-    return from(this.authService.getAccessToken()).pipe(
+  private getRequestOptions(): Observable<{ headers: HttpHeaders }> {
+    const authService = this.getAuthService();
+    return from(authService.getAccessToken()).pipe(
       switchMap((token) => {
-        if (!token) {
-          throw new Error('Unable to acquire access token');
-        }
-
-        const headers = new HttpHeaders({
-          Authorization: `Bearer ${token}`,
+        let headers = new HttpHeaders({
           'Content-Type': 'application/json',
         });
+        if (token) {
+          headers = headers.set('Authorization', `Bearer ${token}`);
+        }
+        return of({ headers });
+      })
+    );
+  }
 
-        return this.http.get<TableDataResponse>(url, { headers });
+  getBackendUrl(): string {
+    return this.clientConfig?.backend_url || 'http://localhost:8000';
+  }
+
+  /**
+   * Fetch all tables dynamically.
+   */
+  listTables(): Observable<TablesResponse> {
+    return this.getRequestOptions().pipe(
+      switchMap((options) => {
+        const url = `${this.getBackendUrl()}/tables`;
+        return this.http.get<TablesResponse>(url, options);
       })
     );
   }
 
   /**
-   * Call /tables-as-service-account endpoint (Service Account flow)
-   * No client-side authentication token needed
+   * Fetch table data dynamically.
    */
-  listTablesByServiceAccount(): Observable<TablesResponse> {
-    const url = `${apiConfig.backendUrl}${apiConfig.endpoints.tablesServiceAccount}`;
-    return this.http.get<TablesResponse>(url);
+  getTableData(tableName: string, limit: number = 50): Observable<TableDataResponse> {
+    return this.getRequestOptions().pipe(
+      switchMap((options) => {
+        const url = `${this.getBackendUrl()}/tables/${tableName}/data?limit=${limit}`;
+        return this.http.get<TableDataResponse>(url, options);
+      })
+    );
   }
-
-  /**
-   * Call /table-data-as-service-account endpoint (Service Account flow)
-   * No client-side authentication token needed
-   */
-  listTableDataByServiceAccount(): Observable<TableDataResponse> {
-    const url = `${apiConfig.backendUrl}${apiConfig.endpoints.tableDataServiceAccount}`;
-    return this.http.get<TableDataResponse>(url);
-  }
-}
-
-export interface TableDataResult {
-  success: boolean;
-  data: any[] | null;
-  error: string | null;
-}
-
-export interface TableDataResponse {
-  employees: TableDataResult;
-  admin_employees: TableDataResult;
 }

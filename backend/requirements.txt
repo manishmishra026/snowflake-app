@@ -5,6 +5,9 @@ PyJWT[crypto]==2.10.1
 snowflake-connector-python==3.13.0
 requests==2.32.3
 pydantic==2.7.4
+pydantic-settings
+azure-monitor-opentelemetry
+opentelemetry-instrumentation-fastapi
 
 # Testing
 pytest==7.4.4

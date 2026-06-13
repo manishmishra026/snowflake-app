@@ -4,14 +4,13 @@ import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
 import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
-import { ApiService, TablesResponse } from '../../services/api.service';
-
-type FlowType = 'service-principal' | 'user-auth' | 'service-account' | null;
+import { ApiService, TablesResponse, ClientConfigResponse } from '../../services/api.service';
+import { TableViewerComponent } from '../../shared/components/table-viewer/table-viewer.component';
 
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, TableViewerComponent],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css',
 })
@@ -21,7 +20,8 @@ export class HomeComponent implements OnInit, OnDestroy {
   loading = false;
   error: string | null = null;
   tablesData: TablesResponse | null = null;
-  currentFlow: FlowType = null;
+  selectedTable: string | null = null;
+  clientConfig: ClientConfigResponse | null = null;
 
   private destroy$ = new Subject<void>();
 
@@ -32,6 +32,22 @@ export class HomeComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
+    // 1. Fetch dynamic settings from API
+    this.apiService.getClientConfig()
+      .pipe(takeUntil(this.destroy$))
+      .subscribe({
+        next: (config) => {
+          this.clientConfig = config;
+          this.cdr.detectChanges();
+        },
+        error: (err) => {
+          console.error('Failed to retrieve client configuration settings:', err);
+          this.error = 'Unable to establish server config connections.';
+          this.cdr.detectChanges();
+        }
+      });
+
+    // 2. Track authentication state
     this.authService
       .isLoggedIn()
       .pipe(takeUntil(this.destroy$))
@@ -63,95 +79,46 @@ export class HomeComponent implements OnInit, OnDestroy {
   logout(): void {
     this.authService.logout();
     this.tablesData = null;
-    this.currentFlow = null;
+    this.selectedTable = null;
     this.error = null;
   }
 
   /**
-   * Fetch tables using Service Principal flow (no auth required)
+   * Query database tables using abstract backend authentication
    */
-  fetchTablesByServicePrincipal(): void {
-    this.loading = true;
-    this.error = null;
-    this.currentFlow = 'service-principal';
-    this.tablesData = null;
-
-    this.apiService.listTablesByServicePrincipal().subscribe({
-      next: (response) => {
-        this.tablesData = response;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: (err) => {
-        console.error('Error fetching tables (service principal):', err);
-        this.error = err.message || 'Failed to fetch tables';
-        this.loading = false;
-        this.currentFlow = null;
-        this.cdr.detectChanges();
-      },
-    });
-  }
-
-  /**
-   * Fetch tables using User Authentication flow (Azure AD OBO)
-   */
-  fetchTablesByUserAuth(): void {
+  fetchTables(): void {
     if (!this.isLoggedIn) {
-      this.error = 'Please login first to use user authentication flow';
+      this.error = 'Login with Azure AD is required to fetch tables.';
       return;
     }
 
     this.loading = true;
     this.error = null;
-    this.currentFlow = 'user-auth';
     this.tablesData = null;
+    this.selectedTable = null;
+    this.cdr.detectChanges();
 
-    this.apiService.listTablesByUserAuth().subscribe({
+    this.apiService.listTables().subscribe({
       next: (response) => {
         this.tablesData = response;
         this.loading = false;
         this.cdr.detectChanges();
       },
       error: (err) => {
-        console.error('Error fetching tables (user auth):', err);
-        this.error = err.message || 'Failed to fetch tables';
+        console.error('Error fetching tables from server:', err);
+        this.error = err.message || 'Failed to list database tables';
         this.loading = false;
-        this.currentFlow = null;
         this.cdr.detectChanges();
       },
     });
   }
 
   /**
-   * Fetch tables using Service Account flow (direct user/pass authentication)
+   * Set target table to view rows and schemas
    */
-  fetchTablesByServiceAccount(): void {
-    this.loading = true;
-    this.error = null;
-    this.currentFlow = 'service-account';
-    this.tablesData = null;
-
-    this.apiService.listTablesByServiceAccount().subscribe({
-      next: (response) => {
-        this.tablesData = response;
-        this.loading = false;
-        this.cdr.detectChanges();
-      },
-      error: (err) => {
-        console.error('Error fetching tables (service account):', err);
-        this.error = err.message || 'Failed to fetch tables';
-        this.loading = false;
-        this.currentFlow = null;
-        this.cdr.detectChanges();
-      },
-    });
-  }
-
-  getFlowName(): string {
-    if (this.currentFlow === 'service-principal') return 'Service Principal';
-    if (this.currentFlow === 'user-auth') return 'User Authentication (OBO)';
-    if (this.currentFlow === 'service-account') return 'Service Account';
-    return '';
+  viewTableData(tableName: string): void {
+    this.selectedTable = tableName;
+    this.cdr.detectChanges();
   }
 
   hasRole(role: string): boolean {
