@@ -76,12 +76,13 @@ export class ApiService {
     const authService = this.getAuthService();
     return from(authService.getAccessToken()).pipe(
       switchMap((token) => {
-        let headers = new HttpHeaders({
-          'Content-Type': 'application/json',
-        });
-        if (token) {
-          headers = headers.set('Authorization', `Bearer ${token}`);
+        if (!token) {
+          throw new Error('Unable to acquire Azure AD authentication token. Please try logging out and logging in again to refresh your session.');
         }
+        const headers = new HttpHeaders({
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        });
         return of({ headers });
       })
     );

@@ -19,7 +19,7 @@ class SnowflakeService:
             tables = [TableInfo(schema_name=row[0], name=row[1]) for row in rows]
             return tables, len(tables)
         except Exception as exc:
-            logger.error("Failed to list tables from Snowflake: %s", exc)
+            logger.error("Failed to list tables from Snowflake: %s", exc, exc_info=True)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to retrieve table listings",
@@ -69,7 +69,7 @@ class SnowflakeService:
                 error=f"User does not have access to table '{table_name}'"
             )
         except Exception as exc:
-            logger.error("Failed to retrieve table data for '%s': %s", table_name, exc)
+            logger.error("Failed to retrieve table data for '%s': %s", table_name, exc, exc_info=True)
             return TableDataResponse(
                 success=False,
                 table_name=table_name,

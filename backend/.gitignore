@@ -24,3 +24,6 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+
+# Logs
+*.log

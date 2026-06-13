@@ -46,7 +46,7 @@ def get_azure_access_token_for_snowflake() -> str:
             raise RuntimeError(f"Azure token error: {error_desc}")
         return token
     except Exception as exc:
-        logger.error("Failed to obtain Azure access token for Snowflake: %s", exc)
+        logger.error("Failed to obtain Azure access token for Snowflake: %s", exc, exc_info=True)
         raise RuntimeError("Failed to acquire access token") from exc
 
 
@@ -84,7 +84,7 @@ def get_current_user(
         if not settings.USER_AUTH_AZURE_CLIENT_ID:
             raise RuntimeError("User auth variables not set")
     except Exception as exc:
-        logger.error("User auth configuration error: %s", exc)
+        logger.error("User auth configuration error: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="User authentication not configured on server",
@@ -121,7 +121,7 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except Exception as exc:
-        logger.error("Token validation failed: %s", exc)
+        logger.error("Token validation failed: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Token validation error",
@@ -162,7 +162,7 @@ def get_user_snowflake_token(user_token: str) -> str:
             raise RuntimeError(f"Token exchange error: {error_desc}")
         return token
     except Exception as exc:
-        logger.error("OBO token exchange failed: %s", exc)
+        logger.error("OBO token exchange failed: %s", exc, exc_info=True)
         raise RuntimeError("Failed to exchange token via OBO flow") from exc
 
 
@@ -195,7 +195,7 @@ def get_user_snowflake_connection(user_token: str) -> Any:
 
         return conn
     except Exception as exc:
-        logger.error("Snowflake connection failed for user token: %s", exc)
+        logger.error("Snowflake connection failed for user token: %s", exc, exc_info=True)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Unable to connect to database using user token",
