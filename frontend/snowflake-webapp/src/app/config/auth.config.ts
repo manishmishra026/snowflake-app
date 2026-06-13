@@ -16,8 +16,8 @@ export const msalConfig: Configuration = {
   auth: {
     clientId: '183b3bcc-4183-4566-a467-7d2f945c5880', // Replace with your Application (Client) ID
     authority: 'https://login.microsoftonline.com/a66a44bf-bf04-4606-839d-3f956853233b', // Replace with your Tenant ID
-    redirectUri: 'http://localhost:4200',
-    postLogoutRedirectUri: 'http://localhost:4200',
+    redirectUri: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4200',
+    postLogoutRedirectUri: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:4200',
   },
   cache: {
     cacheLocation: 'localStorage', // Use localStorage for cache
@@ -51,7 +51,11 @@ export const loginRequest = {
  * API Configuration
  */
 export const apiConfig = {
-  backendUrl: 'http://localhost:8000', // FastAPI backend URL
+  backendUrl: typeof window !== 'undefined'
+    ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+        ? 'http://localhost:8000'
+        : window.location.origin) // Replace with your production backend App Service URL if different
+    : 'http://localhost:8000',
   endpoints: {
     tablesServicePrincipal: '/tables',
     tablesUserAuth: '/tables-as-user',

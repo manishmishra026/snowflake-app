@@ -2,6 +2,7 @@ import { Component, OnInit, OnDestroy, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Subject } from 'rxjs';
 import { takeUntil } from 'rxjs/operators';
+import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { ApiService, TablesResponse } from '../../services/api.service';
 
@@ -10,7 +11,7 @@ type FlowType = 'service-principal' | 'user-auth' | null;
 @Component({
   selector: 'app-home',
   standalone: true,
-  imports: [CommonModule],
+  imports: [CommonModule, RouterModule],
   templateUrl: './home.component.html',
   styleUrl: './home.component.css',
 })
@@ -125,5 +126,9 @@ export class HomeComponent implements OnInit, OnDestroy {
     if (this.currentFlow === 'service-principal') return 'Service Principal';
     if (this.currentFlow === 'user-auth') return 'User Authentication (OBO)';
     return '';
+  }
+
+  hasRole(role: string): boolean {
+    return this.authService.hasRole(role);
   }
 }

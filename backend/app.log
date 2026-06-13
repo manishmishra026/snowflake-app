@@ -1,0 +1,23 @@
+2026-06-11 21:01:33,386 - app - INFO - Application starting...
+2026-06-11 21:01:33,387 - app - INFO - Refreshing Azure Snowflake access token
+2026-06-11 21:01:33,856 - app - INFO - Application initialized successfully
+2026-06-11 21:02:05,602 - app - INFO - Incoming token - issuer (iss): https://sts.windows.net/a66a44bf-bf04-4606-839d-3f956853233b/, audience (aud): api://89a80661-cf8b-4e10-b3f4-b2b06be53a81, expected issuer: https://login.microsoftonline.com/a66a44bf-bf04-4606-839d-3f956853233b/v2.0, expected audiences: ('api://89a80661-cf8b-4e10-b3f4-b2b06be53a81', '89a80661-cf8b-4e10-b3f4-b2b06be53a81')
+2026-06-11 21:02:05,924 - app - INFO - User authenticated: c0187c06-252d-4daf-9bb4-312382978cdf
+2026-06-11 21:02:05,926 - app - INFO - Exchanging user token for Snowflake token via OBO flow
+2026-06-11 21:02:06,502 - app - INFO - Exchanged Snowflake token claims - iss: https://sts.windows.net/a66a44bf-bf04-4606-839d-3f956853233b/, aud: api://28c90a4e-4a96-4f78-ab0e-171bd1a984ba, upn: sqladmin@manishmishra026outlook.onmicrosoft.com, email: None, unique_name: sqladmin@manishmishra026outlook.onmicrosoft.com, sub: Mype9Mfv53ySu4ajEFuBlDbvS9CywKtEvv8FH_2ZlCQ, scp: session:scope:SNOWFLAKE_API_ROLE, roles: None
+2026-06-11 21:02:06,503 - snowflake.connector.connection - INFO - Snowflake Connector for Python Version: 4.6.0, Python Version: 3.12.0, Platform: Windows-11-10.0.26100-SP0
+2026-06-11 21:02:06,503 - snowflake.connector.connection - INFO - Connecting to GLOBAL Snowflake domain
+2026-06-11 21:02:09,376 - app - ERROR - Snowflake database error: 250001 (08001): None: Failed to connect to DB: dhhvjpy-sv13832.snowflakecomputing.com:443. Invalid OAuth access token. [3e5d7877-4825-4dfb-b4ad-1302b72b7e00]
+2026-06-11 21:02:10,447 - app - INFO - Incoming token - issuer (iss): https://sts.windows.net/a66a44bf-bf04-4606-839d-3f956853233b/, audience (aud): api://89a80661-cf8b-4e10-b3f4-b2b06be53a81, expected issuer: https://login.microsoftonline.com/a66a44bf-bf04-4606-839d-3f956853233b/v2.0, expected audiences: ('api://89a80661-cf8b-4e10-b3f4-b2b06be53a81', '89a80661-cf8b-4e10-b3f4-b2b06be53a81')
+2026-06-11 21:02:10,747 - app - INFO - User authenticated: 5892adee-c51e-4ba8-a219-0a0001552206
+2026-06-11 21:02:10,747 - app - INFO - Exchanging user token for Snowflake token via OBO flow
+2026-06-11 21:02:11,360 - app - INFO - Exchanged Snowflake token claims - iss: https://sts.windows.net/a66a44bf-bf04-4606-839d-3f956853233b/, aud: api://28c90a4e-4a96-4f78-ab0e-171bd1a984ba, upn: None, email: manish.mishra026@outlook.com, unique_name: live.com#manish.mishra026@outlook.com, sub: np8m8FLzNLGGFAT7KMwqivM3cOJITsaiEsDWe1-TWEo, scp: session:scope:SNOWFLAKE_API_ROLE, roles: None
+2026-06-11 21:02:11,360 - snowflake.connector.connection - INFO - Snowflake Connector for Python Version: 4.6.0, Python Version: 3.12.0, Platform: Windows-11-10.0.26100-SP0
+2026-06-11 21:02:11,360 - snowflake.connector.connection - INFO - Connecting to GLOBAL Snowflake domain
+2026-06-11 21:02:16,175 - app - INFO - User 5892adee-c51e-4ba8-a219-0a0001552206 retrieved 2 tables with their permissions
+2026-06-11 21:02:18,660 - app - INFO - Incoming token - issuer (iss): https://sts.windows.net/a66a44bf-bf04-4606-839d-3f956853233b/, audience (aud): api://89a80661-cf8b-4e10-b3f4-b2b06be53a81, expected issuer: https://login.microsoftonline.com/a66a44bf-bf04-4606-839d-3f956853233b/v2.0, expected audiences: ('api://89a80661-cf8b-4e10-b3f4-b2b06be53a81', '89a80661-cf8b-4e10-b3f4-b2b06be53a81')
+2026-06-11 21:02:19,046 - app - INFO - User authenticated: 5892adee-c51e-4ba8-a219-0a0001552206
+2026-06-11 21:02:19,046 - app - INFO - Exchanging user token for Snowflake token via OBO flow
+2026-06-11 21:02:19,543 - app - INFO - Exchanged Snowflake token claims - iss: https://sts.windows.net/a66a44bf-bf04-4606-839d-3f956853233b/, aud: api://28c90a4e-4a96-4f78-ab0e-171bd1a984ba, upn: None, email: manish.mishra026@outlook.com, unique_name: live.com#manish.mishra026@outlook.com, sub: np8m8FLzNLGGFAT7KMwqivM3cOJITsaiEsDWe1-TWEo, scp: session:scope:SNOWFLAKE_API_ROLE, roles: None
+2026-06-11 21:02:19,545 - snowflake.connector.connection - INFO - Snowflake Connector for Python Version: 4.6.0, Python Version: 3.12.0, Platform: Windows-11-10.0.26100-SP0
+2026-06-11 21:02:19,545 - snowflake.connector.connection - INFO - Connecting to GLOBAL Snowflake domain

@@ -40,6 +40,10 @@ export function msalInterceptorConfigFactory(): MsalInterceptorConfiguration {
     `${apiConfig.backendUrl}${apiConfig.endpoints.tablesUserAuth}`,
     ['api://89a80661-cf8b-4e10-b3f4-b2b06be53a81/user_impersonation']
   );
+  protectedResourceMap.set(
+    `${apiConfig.backendUrl}/table-data-as-user`,
+    ['api://89a80661-cf8b-4e10-b3f4-b2b06be53a81/user_impersonation']
+  );
 
   return {
     interactionType: InteractionType.Redirect,

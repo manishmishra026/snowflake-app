@@ -67,6 +67,16 @@
             : '👤 Get Tables (User Auth)' }}
         </button>
       </div>
+
+      <!-- Route Navigation Links -->
+      <div class="navigation-group" *ngIf="isLoggedIn" style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center;">
+        <a *ngIf="hasRole('admins') || hasRole('admin')" routerLink="/admin" class="btn" style="background: #e74c3c; color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+          🛡️ Open Admin Page
+        </a>
+        <a *ngIf="hasRole('readers') || hasRole('reader')" routerLink="/reader" class="btn" style="background: #3498db; color: white; text-decoration: none; display: inline-flex; align-items: center; gap: 0.5rem;">
+          📖 Open Reader Page
+        </a>
+      </div>
     </section>
 
     <!-- Error Section -->

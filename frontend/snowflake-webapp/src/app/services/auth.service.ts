@@ -106,4 +106,29 @@ export class AuthService implements OnDestroy {
     const profile = this.userProfile$.value;
     return profile?.name || profile?.username || 'User';
   }
+
+  getUserRoles(): string[] {
+    const profile = this.userProfile$.value;
+    if (profile) {
+      console.log('User Profile ID Token Claims:', profile.idTokenClaims);
+    }
+    if (profile && profile.idTokenClaims && (profile.idTokenClaims as any).roles) {
+      const rawRoles = (profile.idTokenClaims as any).roles as string[];
+      return rawRoles.map(role => {
+        const lowerRole = role.toLowerCase().trim();
+        if (lowerRole === 'ceb213da-f557-4a7b-94d7-3e0a1cea2b22' || lowerRole === 'admin' || lowerRole === 'admins') {
+          return 'admins';
+        }
+        if (lowerRole === 'reader' || lowerRole === 'readers') {
+          return 'readers';
+        }
+        return role;
+      });
+    }
+    return [];
+  }
+
+  hasRole(role: string): boolean {
+    return this.getUserRoles().includes(role);
+  }
 }

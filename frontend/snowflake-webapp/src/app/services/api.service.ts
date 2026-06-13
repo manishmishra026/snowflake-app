@@ -56,4 +56,38 @@ export class ApiService {
       })
     );
   }
+
+  /**
+   * Call /table-data-as-user endpoint to fetch select results from both tables
+   * Requires valid Azure AD bearer token
+   */
+  listTableDataByUserAuth(): Observable<TableDataResponse> {
+    const url = `${apiConfig.backendUrl}/table-data-as-user`;
+
+    return from(this.authService.getAccessToken()).pipe(
+      switchMap((token) => {
+        if (!token) {
+          throw new Error('Unable to acquire access token');
+        }
+
+        const headers = new HttpHeaders({
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        });
+
+        return this.http.get<TableDataResponse>(url, { headers });
+      })
+    );
+  }
+}
+
+export interface TableDataResult {
+  success: boolean;
+  data: any[] | null;
+  error: string | null;
+}
+
+export interface TableDataResponse {
+  employees: TableDataResult;
+  admin_employees: TableDataResult;
 }

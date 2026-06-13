@@ -182,9 +182,6 @@ def get_user_snowflake_connection(user_token: str) -> Any:
         if settings.snowflake_warehouse:
             connection_params["warehouse"] = settings.snowflake_warehouse
 
-        if settings.snowflake_role:
-            connection_params["role"] = settings.snowflake_role
-
         conn = snowflake.connector.connect(**connection_params)
 
         # Explicitly set database and schema

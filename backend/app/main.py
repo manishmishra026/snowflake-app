@@ -22,9 +22,17 @@ from app.config import (
 
 load_dotenv(override=True)
 
+# Configure logging to write both to console and a file in the workspace
+log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+log_file = os.path.join(os.path.dirname(os.path.dirname(__file__)), "app.log")
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    format=log_format,
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler(log_file, encoding="utf-8")
+    ]
 )
 logger = logging.getLogger("app")
 
@@ -51,6 +59,21 @@ class HealthResponse(BaseModel):
     """Health check response."""
 
     status: str
+
+
+class TableDataResult(BaseModel):
+    """Result of querying a single table."""
+
+    success: bool
+    data: Optional[list[Dict[str, Any]]] = None
+    error: Optional[str] = None
+
+
+class TableDataResponse(BaseModel):
+    """Response containing data query results for both tables."""
+
+    employees: TableDataResult
+    admin_employees: TableDataResult
 
 
 # ---------------------------------------------------------------------------
@@ -360,6 +383,69 @@ def list_tables_as_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve tables",
+        ) from exc
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.get("/table-data-as-user", response_model=TableDataResponse)
+def get_table_data_as_user(
+    request: Request,
+    user_claims: Dict[str, Any] = Depends(get_current_user),
+) -> TableDataResponse:
+    """Query EMPLOYEES and ADMIN_EMPLOYEES tables as the user.
+
+    Uses user's OBO token and lets Snowflake resolve the active/default role.
+    Catches access denied errors individually for each table.
+    """
+    user_id = user_claims.get("oid") or user_claims.get("sub", "unknown")
+
+    auth_header = request.headers.get("authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+
+    user_token = auth_header[7:]  # Remove "Bearer " prefix
+
+    conn = None
+    try:
+        conn = get_user_snowflake_connection(user_token)
+        
+        def query_table(table_name: str) -> TableDataResult:
+            cursor = conn.cursor()
+            try:
+                # Limit rows to avoid returning huge amounts of data
+                cursor.execute(f"SELECT * FROM {table_name} LIMIT 50")
+                rows = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+                data = [dict(zip(columns, row)) for row in rows]
+                return TableDataResult(success=True, data=data, error=None)
+            except snowflake.connector.ProgrammingError as exc:
+                err_msg = str(exc)
+                logger.warning("Access to table %s failed for user %s: %s", table_name, user_id, err_msg)
+                return TableDataResult(
+                    success=False,
+                    data=None,
+                    error=f"User does not have access to table '{table_name}'"
+                )
+            finally:
+                cursor.close()
+
+        employees_result = query_table("EMPLOYEES")
+        admin_employees_result = query_table("ADMIN_EMPLOYEES")
+
+        return TableDataResponse(
+            employees=employees_result,
+            admin_employees=admin_employees_result
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to retrieve table data for user %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve table data",
         ) from exc
     finally:
         if conn:
