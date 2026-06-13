@@ -49,3 +49,42 @@ def test_tables_as_user_no_token():
     assert response.status_code == 401
     assert response.json()["detail"] == "Missing bearer token"
 
+
+def test_tables_as_service_account_mocked():
+    """Test the /tables-as-service-account endpoint with mocked Snowflake connection."""
+    from unittest.mock import patch, MagicMock
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [("PUBLIC", "EMPLOYEES"), ("PUBLIC", "ADMIN_EMPLOYEES")]
+    mock_conn.cursor.return_value = mock_cursor
+
+    with patch("app.main.get_service_account_connection", return_value=mock_conn):
+        response = client.get("/tables-as-service-account")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["count"] == 2
+        assert data["tables"][0]["name"] == "EMPLOYEES"
+        assert data["tables"][1]["name"] == "ADMIN_EMPLOYEES"
+
+
+def test_table_data_as_service_account_mocked():
+    """Test the /table-data-as-service-account endpoint with mocked Snowflake connection."""
+    from unittest.mock import patch, MagicMock
+    mock_conn = MagicMock()
+    mock_cursor = MagicMock()
+    mock_cursor.fetchall.return_value = [
+        (1, "Alice", "Smith", "Engineering", "Developer"),
+    ]
+    mock_cursor.description = [
+        ("EMPLOYEE_ID",), ("FIRST_NAME",), ("LAST_NAME",), ("DEPARTMENT",), ("JOB_TITLE",)
+    ]
+    mock_conn.cursor.return_value = mock_cursor
+
+    with patch("app.main.get_service_account_connection", return_value=mock_conn):
+        response = client.get("/table-data-as-service-account")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["employees"]["success"] is True
+        assert data["employees"]["data"][0]["FIRST_NAME"] == "Alice"
+        assert data["admin_employees"]["success"] is True
+

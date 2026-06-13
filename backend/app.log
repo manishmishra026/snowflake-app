@@ -21,3 +21,35 @@
 2026-06-11 21:02:19,543 - app - INFO - Exchanged Snowflake token claims - iss: https://sts.windows.net/a66a44bf-bf04-4606-839d-3f956853233b/, aud: api://28c90a4e-4a96-4f78-ab0e-171bd1a984ba, upn: None, email: manish.mishra026@outlook.com, unique_name: live.com#manish.mishra026@outlook.com, sub: np8m8FLzNLGGFAT7KMwqivM3cOJITsaiEsDWe1-TWEo, scp: session:scope:SNOWFLAKE_API_ROLE, roles: None
 2026-06-11 21:02:19,545 - snowflake.connector.connection - INFO - Snowflake Connector for Python Version: 4.6.0, Python Version: 3.12.0, Platform: Windows-11-10.0.26100-SP0
 2026-06-11 21:02:19,545 - snowflake.connector.connection - INFO - Connecting to GLOBAL Snowflake domain
+2026-06-13 18:20:43,634 - app - INFO - Application starting...
+2026-06-13 18:20:43,634 - app - INFO - Refreshing Azure Snowflake access token
+2026-06-13 18:20:44,336 - app - INFO - Application initialized successfully
+2026-06-13 18:20:50,157 - app - ERROR - Snowflake connection failed: SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD env variable is not set
+2026-06-13 18:21:21,191 - watchfiles.main - INFO - 1 change detected
+2026-06-13 18:21:28,022 - app - ERROR - Snowflake connection failed: SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD env variable is not set
+2026-06-13 18:21:28,975 - app - ERROR - Snowflake connection failed: SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD env variable is not set
+2026-06-13 18:21:33,178 - app - INFO - Application shutting down...
+2026-06-13 18:21:36,404 - app - INFO - Application starting...
+2026-06-13 18:21:36,404 - app - INFO - Refreshing Azure Snowflake access token
+2026-06-13 18:21:37,017 - app - INFO - Application initialized successfully
+2026-06-13 18:21:41,856 - snowflake.connector.connection - INFO - Snowflake Connector for Python Version: 4.6.0, Python Version: 3.14.2, Platform: Windows-11-10.0.26100-SP0
+2026-06-13 18:21:41,857 - snowflake.connector.connection - INFO - Connecting to GLOBAL Snowflake domain
+2026-06-13 18:21:46,051 - app - ERROR - Snowflake database error: 250001 (08001): None: Failed to connect to DB: dhhvjpy-sv13832.snowflakecomputing.com:443. Role 'SNOWFLAKE_API_ROLE' specified in the connect string is not granted to this user, or is not permitted for the credentials being used. Contact your local system administrator, or attempt to login with another role, e.g. PUBLIC.
+2026-06-13 18:22:12,040 - watchfiles.main - INFO - 1 change detected
+2026-06-13 18:22:20,916 - watchfiles.main - INFO - 1 change detected
+2026-06-13 18:22:27,097 - watchfiles.main - INFO - 1 change detected
+2026-06-13 18:22:27,217 - app - INFO - Application shutting down...
+2026-06-13 18:22:27,784 - watchfiles.main - INFO - 6 changes detected
+2026-06-13 18:22:28,349 - app - INFO - Application starting...
+2026-06-13 18:22:28,350 - app - INFO - Refreshing Azure Snowflake access token
+2026-06-13 18:22:28,854 - app - INFO - Application initialized successfully
+2026-06-13 18:22:37,674 - watchfiles.main - INFO - 1 change detected
+2026-06-13 18:22:38,483 - watchfiles.main - INFO - 1 change detected
+2026-06-13 18:22:41,854 - watchfiles.main - INFO - 1 change detected
+2026-06-13 18:23:21,195 - app - INFO - Application shutting down...
+2026-06-13 18:23:26,581 - app - INFO - Application starting...
+2026-06-13 18:23:26,581 - app - INFO - Refreshing Azure Snowflake access token
+2026-06-13 18:23:27,192 - app - INFO - Application initialized successfully
+2026-06-13 18:23:35,092 - snowflake.connector.connection - INFO - Snowflake Connector for Python Version: 4.6.0, Python Version: 3.14.2, Platform: Windows-11-10.0.26100-SP0
+2026-06-13 18:23:35,092 - snowflake.connector.connection - INFO - Connecting to GLOBAL Snowflake domain
+2026-06-13 18:23:39,974 - app - INFO - Service Account retrieved 2 tables from SNOWFLAKE_SAMPLE_Apps.PUBLIC

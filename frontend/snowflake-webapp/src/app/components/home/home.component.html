@@ -21,7 +21,7 @@
     <section class="welcome">
       <h2>Welcome to Snowflake Tables Browser</h2>
       <p>
-        This application demonstrates two ways to query Snowflake tables:
+        This application demonstrates three ways to query Snowflake tables:
       </p>
       <div class="description">
         <div class="flow-desc">
@@ -36,6 +36,13 @@
           <p>
             Query tables using your own Azure AD credentials. Uses on-behalf-of
             token exchange. Must be logged in.
+          </p>
+        </div>
+        <div class="flow-desc">
+          <h3>3️⃣ Service Account Flow</h3>
+          <p>
+            Query tables using a direct database user (webapp_user) and password.
+            No client authentication required.
           </p>
         </div>
       </div>
@@ -65,6 +72,16 @@
           {{ loading && currentFlow === 'user-auth'
             ? '⏳ Loading...'
             : '👤 Get Tables (User Auth)' }}
+        </button>
+
+        <button
+          class="btn btn-success"
+          (click)="fetchTablesByServiceAccount()"
+          [disabled]="loading"
+        >
+          {{ loading && currentFlow === 'service-account'
+            ? '⏳ Loading...'
+            : '⚙️ Get Tables (Service Account)' }}
         </button>
       </div>
 

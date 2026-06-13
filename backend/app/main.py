@@ -285,6 +285,60 @@ def get_snowflake_connection() -> Any:
             detail="Unable to connect to database",
         ) from exc
 
+def get_service_account_connection() -> Any:
+    """Create a Snowflake connection using Username and Password authentication."""
+    try:
+        user = os.getenv("SNOWFLAKE_SERVICE_ACCOUNT_USER", "webapp_user").strip()
+        password = os.getenv("SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD", "").strip()
+        if not password:
+            raise RuntimeError("SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD env variable is not set")
+
+        connection_params = {
+            "account": settings.snowflake_account,
+            "user": user,
+            "password": password,
+        }
+
+        if settings.snowflake_warehouse:
+            connection_params["warehouse"] = settings.snowflake_warehouse
+
+        service_account_role = os.getenv("SNOWFLAKE_SERVICE_ACCOUNT_ROLE", "").strip()
+        if service_account_role:
+            connection_params["role"] = service_account_role
+        elif settings.snowflake_role:
+            connection_params["role"] = settings.snowflake_role
+
+        conn = snowflake.connector.connect(**connection_params)
+
+        # Explicitly set database and schema
+        try:
+            cursor = conn.cursor()
+            cursor.execute(f'USE DATABASE "{settings.snowflake_database}"')
+            if settings.snowflake_schema:
+                cursor.execute(f'USE SCHEMA "{settings.snowflake_schema}"')
+        finally:
+            cursor.close()
+
+        return conn
+    except snowflake.connector.DatabaseError as exc:
+        logger.error("Snowflake database error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Database connection failed",
+        ) from exc
+    except snowflake.connector.ProgrammingError as exc:
+        logger.error("Snowflake programming error: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Invalid database or schema",
+        ) from exc
+    except Exception as exc:
+        logger.error("Snowflake connection failed: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Unable to connect to database",
+        ) from exc
+
 
 # ---------------------------------------------------------------------------
 # Endpoints
@@ -443,6 +497,93 @@ def get_table_data_as_user(
         raise
     except Exception as exc:
         logger.error("Failed to retrieve table data for user %s: %s", user_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve table data",
+        ) from exc
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.get("/tables-as-service-account", response_model=TablesResponse)
+def list_tables_as_service_account() -> TablesResponse:
+    """List all tables queried using the Service Account connection."""
+    conn = None
+    try:
+        conn = get_service_account_connection()
+        cursor = conn.cursor()
+        try:
+            cursor.execute(
+                """
+                SELECT TABLE_SCHEMA, TABLE_NAME
+                FROM INFORMATION_SCHEMA.TABLES
+                WHERE TABLE_TYPE = 'BASE TABLE'
+                ORDER BY TABLE_SCHEMA, TABLE_NAME
+                """
+            )
+            rows = cursor.fetchall()
+            tables = [TableInfo(schema=row[0], name=row[1]) for row in rows]
+            logger.info(
+                "Service Account retrieved %d tables from %s.%s",
+                len(tables),
+                settings.snowflake_database,
+                settings.snowflake_schema,
+            )
+            return TablesResponse(tables=tables, count=len(tables))
+        finally:
+            cursor.close()
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to retrieve tables as Service Account: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to retrieve tables",
+        ) from exc
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.get("/table-data-as-service-account", response_model=TableDataResponse)
+def get_table_data_as_service_account() -> TableDataResponse:
+    """Query EMPLOYEES and ADMIN_EMPLOYEES tables as the Service Account."""
+    conn = None
+    try:
+        conn = get_service_account_connection()
+        
+        def query_table(table_name: str) -> TableDataResult:
+            cursor = conn.cursor()
+            try:
+                cursor.execute(f"SELECT * FROM {table_name} LIMIT 50")
+                rows = cursor.fetchall()
+                columns = [desc[0] for desc in cursor.description]
+                data = [dict(zip(columns, row)) for row in rows]
+                return TableDataResult(success=True, data=data, error=None)
+            except snowflake.connector.ProgrammingError as exc:
+                err_msg = str(exc)
+                logger.warning("Access to table %s failed for Service Account: %s", table_name, err_msg)
+                return TableDataResult(
+                    success=False,
+                    data=None,
+                    error=f"Service account does not have access to table '{table_name}'"
+                )
+            finally:
+                cursor.close()
+
+        employees_result = query_table("EMPLOYEES")
+        admin_employees_result = query_table("ADMIN_EMPLOYEES")
+
+        return TableDataResponse(
+            employees=employees_result,
+            admin_employees=admin_employees_result
+        )
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("Failed to retrieve table data for Service Account: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve table data",

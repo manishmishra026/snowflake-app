@@ -6,7 +6,7 @@ import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { ApiService, TablesResponse } from '../../services/api.service';
 
-type FlowType = 'service-principal' | 'user-auth' | null;
+type FlowType = 'service-principal' | 'user-auth' | 'service-account' | null;
 
 @Component({
   selector: 'app-home',
@@ -122,9 +122,35 @@ export class HomeComponent implements OnInit, OnDestroy {
     });
   }
 
+  /**
+   * Fetch tables using Service Account flow (direct user/pass authentication)
+   */
+  fetchTablesByServiceAccount(): void {
+    this.loading = true;
+    this.error = null;
+    this.currentFlow = 'service-account';
+    this.tablesData = null;
+
+    this.apiService.listTablesByServiceAccount().subscribe({
+      next: (response) => {
+        this.tablesData = response;
+        this.loading = false;
+        this.cdr.detectChanges();
+      },
+      error: (err) => {
+        console.error('Error fetching tables (service account):', err);
+        this.error = err.message || 'Failed to fetch tables';
+        this.loading = false;
+        this.currentFlow = null;
+        this.cdr.detectChanges();
+      },
+    });
+  }
+
   getFlowName(): string {
     if (this.currentFlow === 'service-principal') return 'Service Principal';
     if (this.currentFlow === 'user-auth') return 'User Authentication (OBO)';
+    if (this.currentFlow === 'service-account') return 'Service Account';
     return '';
   }
 

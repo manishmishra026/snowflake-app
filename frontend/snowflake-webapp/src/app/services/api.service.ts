@@ -79,6 +79,24 @@ export class ApiService {
       })
     );
   }
+
+  /**
+   * Call /tables-as-service-account endpoint (Service Account flow)
+   * No client-side authentication token needed
+   */
+  listTablesByServiceAccount(): Observable<TablesResponse> {
+    const url = `${apiConfig.backendUrl}${apiConfig.endpoints.tablesServiceAccount}`;
+    return this.http.get<TablesResponse>(url);
+  }
+
+  /**
+   * Call /table-data-as-service-account endpoint (Service Account flow)
+   * No client-side authentication token needed
+   */
+  listTableDataByServiceAccount(): Observable<TableDataResponse> {
+    const url = `${apiConfig.backendUrl}${apiConfig.endpoints.tableDataServiceAccount}`;
+    return this.http.get<TableDataResponse>(url);
+  }
 }
 
 export interface TableDataResult {

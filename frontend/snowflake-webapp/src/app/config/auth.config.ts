@@ -59,5 +59,7 @@ export const apiConfig = {
   endpoints: {
     tablesServicePrincipal: '/tables',
     tablesUserAuth: '/tables-as-user',
+    tablesServiceAccount: '/tables-as-service-account',
+    tableDataServiceAccount: '/table-data-as-service-account',
   },
 };

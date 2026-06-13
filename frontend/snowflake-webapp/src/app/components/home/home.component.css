@@ -75,7 +75,7 @@
 
 .description {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
   gap: 1.5rem;
   margin-top: 1.5rem;
 }
@@ -140,6 +140,15 @@
 
 .btn-secondary:hover:not(:disabled) {
   background: #63398b;
+}
+
+.btn-success {
+  background: #2ecc71;
+  color: white;
+}
+
+.btn-success:hover:not(:disabled) {
+  background: #27ae60;
 }
 
 .btn-logout {
