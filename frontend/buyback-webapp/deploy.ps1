@@ -18,7 +18,7 @@ Write-Host "2. Building Angular application..." -ForegroundColor Cyan
 npm run build
 
 # Path to built static files
-$buildOutPath = ".\dist\snowflake-webapp\browser"
+$buildOutPath = ".\dist\buyback-webapp\browser"
 $zipPath = ".\deploy.zip"
 
 if (Test-Path $zipPath) {

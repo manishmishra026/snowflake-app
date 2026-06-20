@@ -6,6 +6,7 @@ import { RouterModule } from '@angular/router';
 import { AuthService } from '../../services/auth.service';
 import { ApiService, TablesResponse, ClientConfigResponse } from '../../services/api.service';
 import { TableViewerComponent } from '../../shared/components/table-viewer/table-viewer.component';
+import { AppInsightsService } from '../../core/services/app-insights.service';
 
 @Component({
   selector: 'app-home',
@@ -28,6 +29,7 @@ export class HomeComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AuthService,
     private apiService: ApiService,
+    private appInsights: AppInsightsService,
     private cdr: ChangeDetectorRef
   ) {}
 
@@ -98,16 +100,20 @@ export class HomeComponent implements OnInit, OnDestroy {
     this.selectedTable = null;
     this.cdr.detectChanges();
 
+    this.appInsights.trackEvent('FetchTablesStart');
+
     this.apiService.listTables().subscribe({
       next: (response) => {
         this.tablesData = response;
         this.loading = false;
+        this.appInsights.trackEvent('FetchTablesSuccess', { count: response.count });
         this.cdr.detectChanges();
       },
       error: (err) => {
         console.error('Error fetching tables from server:', err);
         this.error = err.message || 'Failed to list database tables';
         this.loading = false;
+        this.appInsights.trackEvent('FetchTablesFailure', { error: err.message || 'unknown' });
         this.cdr.detectChanges();
       },
     });
@@ -118,6 +124,7 @@ export class HomeComponent implements OnInit, OnDestroy {
    */
   viewTableData(tableName: string): void {
     this.selectedTable = tableName;
+    this.appInsights.trackEvent('ViewTableData', { tableName });
     this.cdr.detectChanges();
   }
 

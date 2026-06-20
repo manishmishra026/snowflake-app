@@ -1,13 +1,13 @@
-# Angular Frontend - Snowflake Tables API
+# Buyback Web App
 
-This is an Angular application that demonstrates authentication with Azure AD (Microsoft Entra ID) and integration with the Snowflake Tables API backend.
+This is an Angular application that demonstrates authentication with Azure AD (Microsoft Entra ID) and integration with the Buyback API backend.
 
 ## Features
 
-✅ **Azure AD Authentication** - Login/logout with MSAL (Microsoft Authentication Library)
-✅ **Dual API Endpoints** - Call backend using service principal or user credentials
-✅ **Service Principal Flow** - Query tables without user authentication
-✅ **User Authentication Flow** - Query tables with on-behalf-of (OBO) token exchange
+✅ **Azure AD Authentication** - Login/logout with MSAL (Microsoft Authentication Library) using App Registration
+✅ **API Authentication** - Calls backend using authenticated App Registration tokens
+✅ **Secure Telemetry** - Integrates with Azure Application Insights to log custom events
+✅ **Access Control** - Displays Admin and Reader views based on user AD roles
 ✅ **Responsive UI** - Beautiful, modern interface with loading states and error handling
 
 ## Prerequisites
@@ -22,7 +22,7 @@ This is an Angular application that demonstrates authentication with Azure AD (M
 ### 1. Install Dependencies
 
 ```bash
-cd frontend/snowflake-webapp
+cd frontend/buyback-webapp
 npm install
 ```
 
@@ -153,7 +153,7 @@ USER_AUTH_SNOWFLAKE_APPLICATION_ID_URI=https://your-account.snowflakecomputing.c
 npm run build
 ```
 
-Output will be in `dist/snowflake-webapp/`
+Output will be in `dist/buyback-webapp/`
 
 ### Run tests
 ```bash

@@ -6,7 +6,6 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.core.logging import setup_logging
 from app.api.router import api_router
-from app.db.security import refresh_azure_snowflake_token
 
 # Configure logging format
 log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -29,11 +28,7 @@ async def lifespan(app: FastAPI):
     try:
         logger.info("Application starting up...")
         
-        # 1. Warm up MSAL cache if service-principal flow is active
-        if settings.SNOWFLAKE_AUTH_FLOW == "service-principal":
-            refresh_azure_snowflake_token()
-            
-        # 2. Setup Application Insights telemetry
+        # Setup Application Insights telemetry
         setup_logging(app)
         
         logger.info("Application startup completed successfully")

@@ -5,14 +5,14 @@ import { TableViewerComponent } from '../../shared/components/table-viewer/table
 import { AuthService } from '../../services/auth.service';
 
 @Component({
-  selector: 'app-admin',
+  selector: 'app-reader',
   standalone: true,
   imports: [CommonModule, RouterModule, TableViewerComponent],
   template: `
-    <div class="admin-container">
+    <div class="reader-container">
       <header class="header">
         <div class="logo-section">
-          <h1>🛡️ Snowflake Admin Portal</h1>
+          <h1>📖 Buyback Reader Portal</h1>
         </div>
         <div class="nav-links">
           <a routerLink="/" class="nav-link">🏠 Home</a>
@@ -22,7 +22,7 @@ import { AuthService } from '../../services/auth.service';
 
       <main class="main-content">
         <div class="card selector-card">
-          <h2>Admin Data Explorer</h2>
+          <h2>Reader Data Explorer</h2>
           <p>Select a table to view database records dynamically. Access is evaluated in Snowflake based on active role credentials.</p>
           <div class="table-selector">
             <button 
@@ -40,7 +40,7 @@ import { AuthService } from '../../services/auth.service';
     </div>
   `,
   styles: [`
-    .admin-container {
+    .reader-container {
       max-width: 1200px;
       margin: 0 auto;
       padding: 1.5rem;
@@ -57,7 +57,7 @@ import { AuthService } from '../../services/auth.service';
     .header h1 {
       margin: 0;
       font-size: 1.8rem;
-      color: #e74c3c;
+      color: #3498db;
     }
     .nav-links {
       display: flex;
@@ -113,13 +113,13 @@ import { AuthService } from '../../services/auth.service';
       border-color: #7f8c8d;
     }
     .btn-active {
-      background: #e74c3c;
+      background: #3498db;
       color: white;
-      border-color: #e74c3c;
+      border-color: #3498db;
     }
   `]
 })
-export class AdminComponent implements OnInit {
+export class ReaderComponent implements OnInit {
   userName = '';
   tables = ['EMPLOYEES', 'ADMIN_EMPLOYEES'];
   selectedTable = 'EMPLOYEES';

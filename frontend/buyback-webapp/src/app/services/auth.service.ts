@@ -4,6 +4,7 @@ import { AccountInfo, AuthenticationResult, EventMessage, EventType } from '@azu
 import { BehaviorSubject, Subject } from 'rxjs';
 import { filter, takeUntil } from 'rxjs/operators';
 import { firstValueFrom } from 'rxjs';
+import { AppInsightsService } from '../core/services/app-insights.service';
 
 @Injectable({
   providedIn: 'root',
@@ -17,6 +18,7 @@ export class AuthService implements OnDestroy {
   constructor(
     private msalService: MsalService,
     private msalBroadcast: MsalBroadcastService,
+    private appInsights: AppInsightsService,
     @Inject(MSAL_GUARD_CONFIG) private msalGuardConfig: MsalGuardConfiguration
   ) {
     this.initializeAuth();
@@ -50,6 +52,7 @@ export class AuthService implements OnDestroy {
             if (result.eventType === EventType.LOGOUT_SUCCESS) {
               this.isLoggedIn$.next(false);
               this.userProfile$.next(null);
+              this.appInsights.trackEvent('UserLogout');
               return;
             }
             const authResult = result.payload as AuthenticationResult;
@@ -58,6 +61,10 @@ export class AuthService implements OnDestroy {
               const accounts = this.msalService.instance.getAllAccounts();
               if (accounts.length > 0) {
                 this.userProfile$.next(accounts[0]);
+                this.appInsights.trackEvent('UserLogin', {
+                  username: accounts[0].username,
+                  name: accounts[0].name
+                });
               }
             }
           });

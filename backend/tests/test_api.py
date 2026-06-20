@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.models.schemas import TableInfo
 from app.db.connection import get_db_connection
+from app.db.security import verify_api_token
 
 client = TestClient(app)
 
@@ -44,6 +45,7 @@ def test_list_tables_mocked():
     ]
     
     app.dependency_overrides[get_db_connection] = lambda: mock_conn
+    app.dependency_overrides[verify_api_token] = lambda: {"appid": "test-webapp-client-id"}
     try:
         with patch("app.services.snowflake_service.SnowflakeService.list_tables", return_value=(mock_tables, 2)):
             response = client.get("/tables")
@@ -72,6 +74,7 @@ def test_get_table_data_mocked():
     mock_conn.cursor.return_value = mock_cursor
 
     app.dependency_overrides[get_db_connection] = lambda: mock_conn
+    app.dependency_overrides[verify_api_token] = lambda: {"appid": "test-webapp-client-id"}
     try:
         with patch("app.services.snowflake_service.SnowflakeService.list_tables", return_value=(mock_tables, 1)):
             response = client.get("/tables/EMPLOYEES/data")
@@ -93,6 +96,7 @@ def test_get_table_data_blocked_by_whitelist():
     ]
 
     app.dependency_overrides[get_db_connection] = lambda: mock_conn
+    app.dependency_overrides[verify_api_token] = lambda: {"appid": "test-webapp-client-id"}
     try:
         with patch("app.services.snowflake_service.SnowflakeService.list_tables", return_value=(mock_tables, 1)):
             response = client.get("/tables/ADMIN_EMPLOYEES/data")
