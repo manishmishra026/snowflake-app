@@ -16,6 +16,7 @@ import { AuthService } from '../../services/auth.service';
         </div>
         <div class="nav-links">
           <a routerLink="/" class="nav-link">🏠 Home</a>
+          <a routerLink="/upload" class="nav-link">📤 Upload</a>
           <span class="user-badge">👤 {{ userName }}</span>
         </div>
       </header>

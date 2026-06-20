@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # Application Insights Connection String
     APPLICATIONINSIGHTS_CONNECTION_STRING: str = ""
 
+    # Azure Storage Configuration
+    AZURE_STORAGE_CONNECTION_STRING: str = ""
+    AZURE_STORAGE_ACCOUNT_URL: str = ""  # For Managed Identity (e.g. https://<account>.blob.core.windows.net)
+    AZURE_STORAGE_CONTAINER_NAME: str = "uploads"
+
     @property
     def azure_issuer(self) -> str:
         return f"https://login.microsoftonline.com/{self.AZURE_TENANT_ID}/v2.0"

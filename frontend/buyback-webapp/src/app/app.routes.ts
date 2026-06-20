@@ -15,6 +15,11 @@ export const routes: Routes = [
     loadComponent: () => import('./features/reader/reader.component').then(m => m.ReaderComponent), 
     canActivate: [MsalGuard] 
   },
+  { 
+    path: 'upload', 
+    loadComponent: () => import('./features/upload/upload.component').then(m => m.UploadComponent), 
+    canActivate: [MsalGuard] 
+  },
   { path: 'login-failed', component: LoginFailedComponent },
   { path: '**', redirectTo: '' },
 ];

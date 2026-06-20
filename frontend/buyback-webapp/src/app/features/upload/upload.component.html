@@ -1,0 +1,90 @@
+<div class="upload-container">
+  <header class="header">
+    <div class="logo-section">
+      <h1>📤 Upload Files Portal</h1>
+    </div>
+    <div class="nav-links">
+      <a routerLink="/" class="nav-link">🏠 Home</a>
+      <span class="user-badge">👤 {{ userName }}</span>
+    </div>
+  </header>
+
+  <main class="main-content">
+    <div class="card upload-card">
+      <h2>Upload Data to Azure Blob Storage</h2>
+      <p class="description">
+        Upload a spreadsheet or CSV data file. The system will save this file securely inside Azure Storage, automatically attaching your credentials/email metadata.
+      </p>
+
+      <!-- Alert Banners -->
+      <div *ngIf="error" class="alert-box error-alert">
+        <span class="alert-icon">❌</span>
+        <div class="alert-content">
+          <strong>Upload Error</strong>
+          <p>{{ error }}</p>
+        </div>
+        <button class="alert-close" (click)="error = null">×</button>
+      </div>
+
+      <div *ngIf="successMessage" class="alert-box success-alert">
+        <span class="alert-icon">✅</span>
+        <div class="alert-content">
+          <strong>Success</strong>
+          <p>{{ successMessage }}</p>
+        </div>
+        <button class="alert-close" (click)="successMessage = null">×</button>
+      </div>
+
+      <!-- Drag & Drop Area -->
+      <div 
+        *ngIf="!selectedFile && !loading"
+        class="dropzone"
+        [class.drag-over]="dragOver"
+        (dragover)="onDragOver($event)"
+        (dragleave)="onDragLeave($event)"
+        (drop)="onDrop($event)"
+        (click)="fileInput.click()"
+      >
+        <div class="dropzone-content">
+          <span class="cloud-icon">☁️</span>
+          <h3>Drag & Drop your file here</h3>
+          <p>or <span class="browse-text">Browse files</span> from your computer</p>
+          <span class="file-limits">Supported formats: .csv, .xlsx (Max 10MB)</span>
+        </div>
+        <input 
+          type="file" 
+          #fileInput 
+          style="display: none" 
+          accept=".csv,.xlsx"
+          (change)="onFileSelected($event)"
+        >
+      </div>
+
+      <!-- Selected File View -->
+      <div *ngIf="selectedFile && !loading" class="selected-file-card">
+        <div class="file-details">
+          <span class="file-icon">📄</span>
+          <div class="file-meta">
+            <span class="file-name">{{ selectedFile.name }}</span>
+            <span class="file-size">{{ (selectedFile.size / 1024).toFixed(1) }} KB</span>
+          </div>
+        </div>
+        <button class="btn btn-remove" (click)="clear()">Remove</button>
+      </div>
+
+      <!-- Loading / Progress View -->
+      <div *ngIf="loading" class="loading-container">
+        <div class="spinner"></div>
+        <p>Uploading and transferring file to Azure Blob Storage...</p>
+      </div>
+
+      <!-- Actions -->
+      <div class="actions-footer" *ngIf="selectedFile && !loading">
+        <button class="btn btn-secondary" (click)="clear()">Cancel</button>
+        <button class="btn btn-primary btn-upload" (click)="upload()">
+          🚀 Upload to Storage
+        </button>
+      </div>
+    </div>
+  </main>
+</div>
