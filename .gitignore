@@ -33,3 +33,4 @@ frontend/snowflake-webapp/.angular/
 *.swo
 .DS_Store
 Thumbs.db
+backend/app.log
