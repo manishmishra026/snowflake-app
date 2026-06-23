@@ -1,0 +1,15 @@
+{
+    "appService.zipIgnorePattern": [
+        "node_modules{,/**}",
+        ".vscode{,/**}"
+    ],
+    "appService.defaultWebAppToDeploy": "/subscriptions/f36480cd-af3b-44be-9ca0-ac5911070a8b/resourceGroups/mmrg/providers/Microsoft.Web/sites/mmappservice-testappgw",
+    "appService.deploySubpath": "frontend\\snowflake-webapp",
+    "azureFunctions.deploySubpath": "Buyback-fileprocessor",
+    "azureFunctions.scmDoBuildDuringDeployment": true,
+    "azureFunctions.pythonVenv": ".venv",
+    "azureFunctions.projectLanguage": "Python",
+    "azureFunctions.projectRuntime": "~4",
+    "debug.internalConsoleOptions": "neverOpen",
+    "azureFunctions.projectLanguageModel": 2
+}

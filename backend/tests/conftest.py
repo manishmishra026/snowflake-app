@@ -13,7 +13,7 @@ def pytest_configure(config):
         "WEB_APP_CLIENT_ID": "test-webapp-client-id",
         "SNOWFLAKE_ACCOUNT": "test-account",
         "SNOWFLAKE_DATABASE": "test-database",
-        "SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD": "test-password",
+        "AZURE_KEYVAULT_URL": "https://test-vault.vault.azure.net/",
     }
     for key, value in test_env.items():
         os.environ.setdefault(key, value)

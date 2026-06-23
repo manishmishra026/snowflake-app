@@ -11,6 +11,7 @@ opentelemetry-instrumentation-fastapi
 azure-storage-blob
 azure-identity
 python-multipart
+azure-keyvault-secrets==4.8.0
 
 
 # Testing

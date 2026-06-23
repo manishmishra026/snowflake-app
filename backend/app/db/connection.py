@@ -5,6 +5,10 @@ from typing import Any, Optional
 import snowflake.connector
 from fastapi import HTTPException, status
 from app.core.config import settings
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.backends import default_backend
+from azure.identity import DefaultAzureCredential
+from azure.keyvault.secrets import SecretClient
 
 logger = logging.getLogger("app")
 
@@ -121,19 +125,42 @@ def _handle_connection_error(exc: Exception) -> None:
     )
 
 
-def create_raw_service_account_connection() -> Any:
-    """Create a raw Snowflake connection using Service Account credentials."""
-    user = settings.SNOWFLAKE_SERVICE_ACCOUNT_USER.strip()
-    password = settings.SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD.strip()
-    role = settings.SNOWFLAKE_SERVICE_ACCOUNT_ROLE.strip() or settings.SNOWFLAKE_ROLE.strip()
+def get_private_key_bytes() -> bytes:
+    """Retrieves Snowflake private key from Key Vault."""
+    if not settings.AZURE_KEYVAULT_URL.strip():
+        raise RuntimeError("AZURE_KEYVAULT_URL is not configured. Key Vault is required.")
+        
+    logger.info("Fetching Snowflake private key from Azure Key Vault")
+    credential = DefaultAzureCredential()
+    client = SecretClient(vault_url=settings.AZURE_KEYVAULT_URL.strip(), credential=credential)
+    secret = client.get_secret(settings.SNOWFLAKE_PRIVATE_KEY_SECRET_NAME)
+    private_key_content = secret.value.encode("utf-8")
 
-    if not password:
-        raise RuntimeError("SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD env variable is not set")
+    # Load PEM and convert to DER format
+    p_key = serialization.load_pem_private_key(
+        private_key_content,
+        password=None,
+        backend=default_backend()
+    )
+
+    return p_key.private_bytes(
+        encoding=serialization.Encoding.DER,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption()
+    )
+
+
+def create_raw_service_account_connection() -> Any:
+    """Create a raw Snowflake connection using Service Account credentials with Key Pair Auth."""
+    user = settings.SNOWFLAKE_SERVICE_ACCOUNT_USER.strip()
+    role = settings.SNOWFLAKE_ROLE.strip()
+    
+    private_key_der = get_private_key_bytes()
 
     connection_params = {
         "account": settings.SNOWFLAKE_ACCOUNT,
         "user": user,
-        "password": password,
+        "private_key": private_key_der,
     }
 
     if settings.SNOWFLAKE_WAREHOUSE:

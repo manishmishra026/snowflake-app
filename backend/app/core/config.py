@@ -16,15 +16,15 @@ class Settings(BaseSettings):
     ALLOWED_CLIENT_IDS: str = ""  # Comma-separated list of allowed calling client IDs
     WEB_APP_CLIENT_ID: str = ""   # Client ID of the web app (passed dynamically to frontend)
 
-    # Snowflake Connection Parameters (Service Account Only)
+    # Snowflake Connection Parameters (Service Account with Key Pair Auth)
     SNOWFLAKE_ACCOUNT: str = ""
     SNOWFLAKE_DATABASE: str = ""
     SNOWFLAKE_SCHEMA: str = "PUBLIC"
     SNOWFLAKE_WAREHOUSE: str = ""
     SNOWFLAKE_ROLE: str = ""
     SNOWFLAKE_SERVICE_ACCOUNT_USER: str = "webapp_user"
-    SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD: str = ""
-    SNOWFLAKE_SERVICE_ACCOUNT_ROLE: str = ""
+    AZURE_KEYVAULT_URL: str = ""
+    SNOWFLAKE_PRIVATE_KEY_SECRET_NAME: str = "snowflake-private-key"
 
     # Application Insights Connection String
     APPLICATIONINSIGHTS_CONNECTION_STRING: str = ""

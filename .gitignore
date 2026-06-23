@@ -28,7 +28,7 @@ frontend/snowflake-webapp/.angular/
 # IDE / OS
 # =============================================================================
 .idea/
-.vscode/
+
 *.swp
 *.swo
 .DS_Store
