@@ -95,7 +95,20 @@ export class AuthService implements OnDestroy {
   async getAccessToken(): Promise<string | null> {
     const accounts = this.msalService.instance.getAllAccounts();
     if (accounts.length === 0) return null;
-    return accounts[0].idToken || null;
+
+    try {
+      const req = this.getGuardAuthRequest();
+      const result = await firstValueFrom(
+        this.msalService.acquireTokenSilent({
+          scopes: req?.scopes || [],
+          account: accounts[0],
+        })
+      );
+      return result?.accessToken || null;
+    } catch (error) {
+      console.error('Failed to acquire token:', error);
+      return null;
+    }
   }
 
   isLoggedIn() {

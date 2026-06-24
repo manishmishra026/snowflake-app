@@ -13,7 +13,7 @@ security = HTTPBearer(auto_error=False)
 def verify_api_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Dict[str, Any]:
-    """Validate incoming Bearer ID Token issued by Azure AD for the Frontend Client."""
+    """Validate incoming bearer token issued by Azure AD for the Backend API."""
     if credentials is None or not credentials.credentials:
         logger.warning("Request rejected: Missing authorization header / bearer token")
         raise HTTPException(
@@ -22,15 +22,25 @@ def verify_api_token(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    if not settings.AZURE_TENANT_ID or not settings.BACKEND_API_CLIENT_ID:
+        logger.error("API authentication settings (AZURE_TENANT_ID / BACKEND_API_CLIENT_ID) are not configured.")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication not configured on server",
+        )
+
     try:
-        # Fetch Microsoft public keys
+        # Load keys from Microsoft JWKS endpoint
         jwk_client = PyJWKClient(settings.azure_jwks_uri)
         signing_key = jwk_client.get_signing_key_from_jwt(credentials.credentials)
 
-        # Since the token is the frontend's ID token, the audience is the WEB_APP_CLIENT_ID
-        allowed_audiences = [settings.WEB_APP_CLIENT_ID]
+        # Determine allowed audiences (API Client ID and api://<API Client ID>)
+        allowed_audiences = [
+            settings.BACKEND_API_CLIENT_ID,
+            f"api://{settings.BACKEND_API_CLIENT_ID}"
+        ]
 
-        # Decode and validate signature, expiration, and audience
+        # Decode and validate token claims
         payload = jwt.decode(
             credentials.credentials,
             signing_key.key,
@@ -39,7 +49,7 @@ def verify_api_token(
             options={"verify_exp": True, "verify_aud": True, "verify_iss": False},
         )
 
-        # Verify issuer matches current tenant
+        # Verify issuer
         token_iss = payload.get("iss")
         allowed_issuers = [
             settings.azure_issuer,
@@ -49,6 +59,26 @@ def verify_api_token(
         if token_iss not in allowed_issuers:
             raise InvalidTokenError(f"Invalid issuer: {token_iss}")
 
+        # Verify scope contains user_impersonation
+        scp = payload.get("scp", "")
+        scopes_list = [s.strip() for s in scp.split(" ") if s.strip()]
+        if "user_impersonation" not in scopes_list:
+            raise InvalidTokenError("Required scope 'user_impersonation' missing in token")
+
+        # Verify the client application is allowed to call this API (checking appid or azp claim)
+        client_app_id = payload.get("appid") or payload.get("azp")
+        if not client_app_id:
+            raise InvalidTokenError("Client application ID claim (appid/azp) missing in token")
+
+        allowed_clients = settings.allowed_client_ids_list
+        if client_app_id not in allowed_clients:
+            logger.warning("Access denied: Client App ID '%s' is not in the allowed clients list", client_app_id)
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied: Client ID {client_app_id} is not authorized to access this API",
+            )
+
+        logger.info("Request authenticated successfully for client app: %s", client_app_id)
         return payload
 
     except InvalidTokenError as exc:
@@ -58,6 +88,8 @@ def verify_api_token(
             detail="Invalid or expired token",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+    except HTTPException:
+        raise
     except Exception as exc:
         logger.error("Token verification failed: %s", exc, exc_info=True)
         raise HTTPException(
