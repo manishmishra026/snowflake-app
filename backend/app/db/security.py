@@ -30,8 +30,18 @@ def verify_api_token(
         )
 
     try:
-        # Load keys from Microsoft JWKS endpoint
-        jwk_client = PyJWKClient(settings.azure_jwks_uri)
+        # Decode payload without verifying signature to check token version (v1.0 vs v2.0)
+        unverified_payload = jwt.decode(credentials.credentials, options={"verify_signature": False})
+        token_ver = unverified_payload.get("ver", "1.0")
+
+        # Select appropriate JWKS endpoint depending on token version
+        if token_ver == "2.0":
+            jwks_uri = settings.azure_jwks_uri
+        else:
+            jwks_uri = f"https://login.microsoftonline.com/{settings.AZURE_TENANT_ID}/discovery/keys"
+
+        # Load keys from selected JWKS endpoint
+        jwk_client = PyJWKClient(jwks_uri)
         signing_key = jwk_client.get_signing_key_from_jwt(credentials.credentials)
 
         # Determine allowed audiences (API Client ID and api://<API Client ID>)
@@ -85,7 +95,7 @@ def verify_api_token(
         logger.warning("Invalid token: %s", exc)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail=f"Invalid or expired token: {str(exc)}",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
     except HTTPException:
