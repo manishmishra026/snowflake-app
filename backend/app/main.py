@@ -69,3 +69,69 @@ app.add_middleware(
 
 # Register all API endpoints
 app.include_router(api_router)
+
+
+
+@app.get("/assets/config/config.json")
+def get_frontend_config():
+    """Dynamically serve frontend configurations using backend environment variables."""
+    return {
+        "app_insights_connection_string": settings.APPLICATIONINSIGHTS_CONNECTION_STRING,
+        "client_id": settings.WEB_APP_CLIENT_ID,
+        "tenant_id": settings.AZURE_TENANT_ID,
+        "scopes": [
+            "openid",
+            "profile",
+            "email",
+            f"api://{settings.BACKEND_API_CLIENT_ID}/user_impersonation"
+        ],
+        "backend_url": ""  # Points relatively to the same origin host
+    }
+
+
+# Serve compiled static Angular files (SPA hosting)
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+from fastapi import HTTPException
+
+# Check if the static directory exists (e.g., when compiled and moved to backend)
+static_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
+if os.path.exists(static_dir):
+    logger.info("Static files directory found at %s. Initializing SPA hosting.", static_dir)
+    
+    # Mount assets directory (images, icons, etc.)
+    assets_dir = os.path.join(static_dir, "assets")
+    if os.path.exists(assets_dir):
+        app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+    @app.get("/{file_name}")
+    def get_static_file(file_name: str):
+        """Serve top-level static assets (e.g. main.js, styles.css) or fallback to SPA index.html."""
+        file_path = os.path.join(static_dir, file_name)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+            
+        # Fall back to index.html to let Angular routing handle client-side routing
+        index_path = os.path.join(static_dir, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
+        raise HTTPException(status_code=404, detail="File not found")
+
+    @app.get("/{catchall:path}")
+    def serve_spa(catchall: str):
+        """Catch-all router to serve index.html for Angular SPA client routes."""
+        # Do not intercept actual API endpoint routes
+        if (
+            catchall.startswith("api") or 
+            catchall.startswith("tables") or 
+            catchall.startswith("upload") or 
+            catchall.startswith("docs") or 
+            catchall.startswith("openapi.json")
+        ):
+            raise HTTPException(status_code=404, detail="Not Found")
+            
+        index_path = os.path.join(static_dir, "index.html")
+        if os.path.isfile(index_path):
+            return FileResponse(index_path)
+        raise HTTPException(status_code=404, detail="SPA index.html not found")
+
