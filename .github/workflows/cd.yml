@@ -1,0 +1,143 @@
+name: Continuous Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        description: 'Target Deployment Environment'
+        required: true
+        options:
+          - PreProd
+          - Prod
+        default: 'PreProd'
+      component:
+        type: choice
+        description: 'Deploy Webapp, Function App, or Both'
+        required: true
+        options:
+          - both
+          - webapp
+          - functionapp
+        default: 'both'
+
+jobs:
+  deploy-webapp:
+    name: Build & Deploy Webapp
+    if: ${{ inputs.component == 'both' || inputs.component == 'webapp' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build Frontend Application
+        working-directory: frontend
+        run: npm run build
+
+      - name: Update frontend config.json with Environment Variables
+        run: |
+          python -c '
+          import json
+          import os
+
+          config_path = "frontend/dist/buyback-webapp/browser/assets/config/config.json"
+          if not os.path.exists(config_path):
+              raise FileNotFoundError(f"Configuration file not found at {config_path}")
+
+          with open(config_path, "r") as f:
+              config = json.load(f)
+
+          config["app_insights_connection_string"] = os.environ.get("APP_INSIGHTS_CONN_STR", "")
+          config["client_id"] = os.environ.get("WEB_APP_CLIENT_ID", "")
+          config["tenant_id"] = os.environ.get("AZURE_TENANT_ID", "")
+
+          backend_client_id = os.environ.get("BACKEND_API_CLIENT_ID", "")
+          if backend_client_id:
+              config["scopes"] = [
+                  "openid",
+                  "profile",
+                  "email",
+                  f"api://{backend_client_id}/user_impersonation"
+              ]
+
+          config["backend_url"] = ""  # Hosted together relative endpoint path
+
+          with open(config_path, "w") as f:
+              json.dump(config, f, indent=2)
+
+          print("Successfully updated build output config.json with target environment variables:")
+          print(f"  Tenant ID: {config[\"tenant_id\"]}")
+          print(f"  Client ID: {config[\"client_id\"]}")
+          '
+        env:
+          APP_INSIGHTS_CONN_STR: ${{ vars.APPLICATIONINSIGHTS_CONNECTION_STRING }}
+          WEB_APP_CLIENT_ID: ${{ vars.WEB_APP_CLIENT_ID }}
+          AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+          BACKEND_API_CLIENT_ID: ${{ vars.BACKEND_API_CLIENT_ID }}
+
+      - name: Copy Frontend Build to Backend Static Folder
+        run: |
+          mkdir -p backend/static
+          cp -R frontend/dist/buyback-webapp/browser/* backend/static/
+          echo "Verified files in backend/static:"
+          ls -la backend/static
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ vars.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ vars.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ vars.AZURE_TENANT_ID }}"}'
+
+      - name: Zip Backend & Static Site Package
+        run: |
+          cd backend
+          zip -r ../backend_deploy.zip . -x ".*" ".venv/*" "tests/*" "app.log"
+          cd ..
+
+      - name: Deploy to Azure App Service
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: ${{ vars.AZURE_APP_SERVICE_NAME }}
+          package: backend_deploy.zip
+
+  deploy-functionapp:
+    name: Build & Deploy Function App
+    if: ${{ inputs.component == 'both' || inputs.component == 'functionapp' }}
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Log in to Azure
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ vars.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ vars.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ vars.AZURE_TENANT_ID }}"}'
+
+      - name: Zip Function App Package
+        run: |
+          cd Buyback-fileprocessor
+          zip -r ../function_deploy.zip . -x ".*" ".venv/*"
+          cd ..
+
+      - name: Deploy to Azure Function App
+        uses: azure/functions-action@v2
+        with:
+          app-name: ${{ vars.AZURE_FUNCTION_APP_NAME }}
+          package: function_deploy.zip
