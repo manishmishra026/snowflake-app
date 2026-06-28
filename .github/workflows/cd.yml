@@ -47,8 +47,8 @@ jobs:
         run: npm run build
 
       - name: Update frontend config.json with Environment Variables
+        shell: python
         run: |
-          python -c '
           import json
           import os
 
@@ -78,9 +78,8 @@ jobs:
               json.dump(config, f, indent=2)
 
           print("Successfully updated build output config.json with target environment variables:")
-          print(f"  Tenant ID: {config[\"tenant_id\"]}")
-          print(f"  Client ID: {config[\"client_id\"]}")
-          '
+          print(f"  Tenant ID: {config['tenant_id']}")
+          print(f"  Client ID: {config['client_id']}")
         env:
           APP_INSIGHTS_CONN_STR: ${{ vars.APPLICATIONINSIGHTS_CONNECTION_STRING }}
           WEB_APP_CLIENT_ID: ${{ vars.WEB_APP_CLIENT_ID }}
@@ -137,7 +136,7 @@ jobs:
           cd ..
 
       - name: Deploy to Azure Function App
-        uses: azure/functions-action@v2
+        uses: azure/functions-action@v1
         with:
           app-name: ${{ vars.AZURE_FUNCTION_APP_NAME }}
           package: function_deploy.zip
