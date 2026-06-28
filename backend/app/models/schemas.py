@@ -33,3 +33,10 @@ class TableDataResponse(BaseModel):
     data: Optional[List[Dict[str, Any]]] = None
     columns: Optional[List[str]] = None
     error: Optional[str] = None
+
+class UploadResponse(BaseModel):
+    """Response payload for file uploads."""
+    success: bool
+    message: str
+    blob_name: str
+

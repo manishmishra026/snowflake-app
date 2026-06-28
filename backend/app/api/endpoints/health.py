@@ -15,16 +15,17 @@ def health() -> HealthResponse:
 def get_client_settings() -> ClientConfigResponse:
     """Return non-sensitive config parameters dynamically for the frontend client."""
     logger.info("Providing dynamic client configuration settings")
-    client_id = settings.USER_AUTH_AZURE_CLIENT_ID
-    audience = settings.USER_AUTH_AZURE_AUDIENCE or (f"api://{client_id}" if client_id else "")
+    client_id = settings.WEB_APP_CLIENT_ID
+    tenant_id = settings.AZURE_TENANT_ID
+    
+    # Standard scope list for the frontend app registration
     scopes = ["openid", "profile", "email"]
-    if audience:
-        base_scope = audience if audience.startswith("api://") else f"api://{audience}"
-        scopes.append(f"{base_scope}/user_impersonation")
+    if settings.BACKEND_API_CLIENT_ID:
+        scopes.append(f"api://{settings.BACKEND_API_CLIENT_ID}/user_impersonation")
 
     return ClientConfigResponse(
         app_insights_connection_string=settings.APPLICATIONINSIGHTS_CONNECTION_STRING,
         client_id=client_id,
-        tenant_id=settings.USER_AUTH_AZURE_TENANT_ID,
+        tenant_id=tenant_id,
         scopes=scopes
     )

@@ -1,0 +1,104 @@
+<div class="container">
+  <!-- Header Section -->
+  <header class="header">
+    <div class="logo">
+      <h1>Buyback Web App</h1>
+    </div>
+    <div class="auth-section">
+      <ng-container *ngIf="isLoggedIn; else notLoggedIn">
+        <span class="user-name">👤 {{ userName }}</span>
+        <button class="btn btn-logout" (click)="logout()">Logout</button>
+      </ng-container>
+      <ng-template #notLoggedIn>
+        <button class="btn btn-login" (click)="login()">Login with Azure AD</button>
+      </ng-template>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Welcome Section -->
+    <section class="welcome">
+      <h2>Database Tables Dashboard</h2>
+      <p>
+        Query tables and view database rows dynamically from Snowflake.
+      </p>
+
+      <div *ngIf="!isLoggedIn" class="login-prompt">
+        <p>🔒 Please sign in with Azure AD to unlock access to tables and query data.</p>
+        <button class="btn btn-primary" (click)="login()">Sign In Now</button>
+      </div>
+    </section>
+
+    <!-- Action Section -->
+    <section class="actions" *ngIf="isLoggedIn">
+      <div class="action-header">
+        <button
+          class="btn btn-primary btn-large"
+          (click)="fetchTables()"
+          [disabled]="loading"
+        >
+          {{ loading ? '⏳ Querying Snowflake...' : '📋 Fetch Database Tables' }}
+        </button>
+      </div>
+
+      <!-- Route Navigation Links -->
+      <div class="navigation-group" *ngIf="isLoggedIn" style="margin-top: 1.5rem; display: flex; gap: 1rem; justify-content: center;">
+        <a *ngIf="hasRole('admins') || hasRole('admin')" routerLink="/admin" class="btn btn-nav btn-admin">
+          🛡️ Open Admin Portal
+        </a>
+        <a *ngIf="hasRole('readers') || hasRole('reader')" routerLink="/reader" class="btn btn-nav btn-reader">
+          📖 Open Reader Portal
+        </a>
+        <a routerLink="/upload" class="btn btn-nav btn-upload" style="background: #27ae60; color: white;">
+          📤 Upload Files
+        </a>
+      </div>
+    </section>
+
+    <!-- Error Section -->
+    <section *ngIf="error" class="error-section">
+      <div class="error-box">
+        <strong>❌ Error:</strong>
+        <p>{{ error }}</p>
+      </div>
+    </section>
+
+    <!-- Results Section -->
+    <section *ngIf="tablesData" class="results">
+      <div class="results-header">
+        <h3>📊 Available Schema Tables</h3>
+        <span class="count-badge">{{ tablesData.count }} tables</span>
+      </div>
+
+      <div class="tables-grid">
+        <div 
+          *ngFor="let table of tablesData.tables" 
+          class="table-item-card" 
+          [class.item-active]="selectedTable === table.name"
+          (click)="viewTableData(table.name)">
+          <span class="table-icon">📁</span>
+          <div class="table-info">
+            <span class="table-name">{{ table.name }}</span>
+            <span class="table-schema">Schema: {{ table.schema }}</span>
+          </div>
+          <span class="arrow-indicator">➔</span>
+        </div>
+      </div>
+
+      <div *ngIf="tablesData.tables.length === 0" class="no-data">
+        <p>No tables discovered in this schema.</p>
+      </div>
+    </section>
+
+    <!-- Dynamic Table Data Section -->
+    <section *ngIf="selectedTable" class="data-detail-section">
+      <app-table-viewer [tableName]="selectedTable"></app-table-viewer>
+    </section>
+  </main>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <p>© 2026 Buyback Web App. All rights reserved.</p>
+  </footer>
+</div>

@@ -8,6 +8,11 @@ pydantic==2.7.4
 pydantic-settings
 azure-monitor-opentelemetry
 opentelemetry-instrumentation-fastapi
+azure-storage-blob
+azure-identity
+python-multipart
+azure-keyvault-secrets==4.8.0
+
 
 # Testing
 pytest==7.4.4

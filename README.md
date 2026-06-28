@@ -13,7 +13,7 @@ snowflake-app/
 │   ├── app/                  # Application source code
 │   └── tests/                # Pytest suite
 └── frontend/
-    └── snowflake-webapp/     # Angular 21+ Single Page App (SPA)
+    └── buyback-webapp/     # Angular 21+ Single Page App (SPA)
 ```
 
 ---
@@ -205,10 +205,10 @@ GRANT SELECT ON TABLE "SNOWFLAKE_SAMPLE_Apps".PUBLIC.ADMIN_EMPLOYEES TO ROLE SNO
    uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
    ```
 
-### Frontend Setup (`frontend/snowflake-webapp/`)
+### Frontend Setup (`frontend/buyback-webapp/`)
 1. Install node dependencies:
    ```bash
-   cd frontend/snowflake-webapp
+   cd frontend/buyback-webapp
    npm install
    ```
 2. Update the MSAL settings in `src/app/config/auth.config.ts` to reference your App Registrations:
