@@ -34,7 +34,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           cache: 'npm'
           cache-dependency-path: frontend/package-lock.json
 
@@ -52,9 +52,23 @@ jobs:
           import json
           import os
 
-          config_path = "frontend/dist/buyback-webapp/browser/assets/config/config.json"
-          if not os.path.exists(config_path):
-              raise FileNotFoundError(f"Configuration file not found at {config_path}")
+          possible_paths = [
+              "frontend/dist/buyback-webapp/browser/assets/config/config.json",
+              "frontend/dist/buyback-webapp/assets/config/config.json"
+          ]
+
+          config_path = None
+          for p in possible_paths:
+              if os.path.exists(p):
+                  config_path = p
+                  break
+
+          if not config_path:
+              if os.path.exists("frontend/dist"):
+                  print("Files in frontend/dist:")
+                  for root, dirs, files in os.walk("frontend/dist"):
+                      print(f"  Root: {root}, Dirs: {dirs}, Files: {files}")
+              raise FileNotFoundError(f"Configuration file not found in any of the expected locations: {possible_paths}")
 
           with open(config_path, "r") as f:
               config = json.load(f)
@@ -89,7 +103,11 @@ jobs:
       - name: Copy Frontend Build to Backend Static Folder
         run: |
           mkdir -p backend/static
-          cp -R frontend/dist/buyback-webapp/browser/* backend/static/
+          if [ -d "frontend/dist/buyback-webapp/browser" ]; then
+            cp -R frontend/dist/buyback-webapp/browser/* backend/static/
+          else
+            cp -R frontend/dist/buyback-webapp/* backend/static/
+          fi
           echo "Verified files in backend/static:"
           ls -la backend/static
 
