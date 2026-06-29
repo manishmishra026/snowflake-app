@@ -52,26 +52,43 @@ jobs:
           import json
           import os
 
-          possible_paths = [
-              "frontend/dist/buyback-webapp/browser/assets/config/config.json",
-              "frontend/dist/buyback-webapp/assets/config/config.json"
+          possible_dirs = [
+              "frontend/dist/buyback-webapp/browser/assets/config",
+              "frontend/dist/buyback-webapp/assets/config"
           ]
 
-          config_path = None
-          for p in possible_paths:
-              if os.path.exists(p):
-                  config_path = p
+          config_dir = None
+          for d in possible_dirs:
+              if os.path.exists(d):
+                  config_dir = d
                   break
 
-          if not config_path:
+          if not config_dir:
               if os.path.exists("frontend/dist"):
                   print("Files in frontend/dist:")
                   for root, dirs, files in os.walk("frontend/dist"):
                       print(f"  Root: {root}, Dirs: {dirs}, Files: {files}")
-              raise FileNotFoundError(f"Configuration file not found in any of the expected locations: {possible_paths}")
+              raise FileNotFoundError(f"Configuration directory not found in any of the expected locations: {possible_dirs}")
 
-          with open(config_path, "r") as f:
-              config = json.load(f)
+          config_file = os.path.join(config_dir, "config.json")
+          example_file = os.path.join(config_dir, "config.json.example")
+
+          if os.path.exists(config_file):
+              with open(config_file, "r") as f:
+                  config = json.load(f)
+          elif os.path.exists(example_file):
+              print(f"config.json not found in build output, loading template from {example_file}")
+              with open(example_file, "r") as f:
+                  config = json.load(f)
+          else:
+              print("Neither config.json nor config.json.example found. Creating empty dictionary.")
+              config = {
+                  "app_insights_connection_string": "",
+                  "client_id": "",
+                  "tenant_id": "",
+                  "scopes": [],
+                  "backend_url": ""
+              }
 
           config["app_insights_connection_string"] = os.environ.get("APP_INSIGHTS_CONN_STR", "")
           config["client_id"] = os.environ.get("WEB_APP_CLIENT_ID", "")
@@ -88,10 +105,10 @@ jobs:
 
           config["backend_url"] = ""  # Hosted together relative endpoint path
 
-          with open(config_path, "w") as f:
+          with open(config_file, "w") as f:
               json.dump(config, f, indent=2)
 
-          print("Successfully updated build output config.json with target environment variables:")
+          print(f"Successfully wrote updated configuration to {config_file}:")
           print(f"  Tenant ID: {config['tenant_id']}")
           print(f"  Client ID: {config['client_id']}")
         env:
