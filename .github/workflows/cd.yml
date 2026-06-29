@@ -144,6 +144,8 @@ jobs:
         with:
           app-name: ${{ vars.AZURE_APP_SERVICE_NAME }}
           package: backend_deploy.zip
+          startup-command: 'gunicorn -w 4 -k uvicorn.workers.UvicornWorker app.main:app'
+
 
   deploy-functionapp:
     name: Build & Deploy Function App
