@@ -1,6 +1,7 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 import { ApiService } from '../../services/api.service';
 import { AuthService } from '../../services/auth.service';
 import { AppInsightsService } from '../../core/services/app-insights.service';
@@ -8,13 +9,14 @@ import { AppInsightsService } from '../../core/services/app-insights.service';
 @Component({
   selector: 'app-upload',
   standalone: true,
-  imports: [CommonModule, RouterModule],
+  imports: [CommonModule, RouterModule, FormsModule],
   templateUrl: './upload.component.html',
   styleUrl: './upload.component.css'
 })
 export class UploadComponent implements OnInit {
   userName = '';
   selectedFile: File | null = null;
+  validityStartDate = '';
   loading = false;
   error: string | null = null;
   successMessage: string | null = null;
@@ -90,6 +92,11 @@ export class UploadComponent implements OnInit {
 
   upload(): void {
     if (!this.selectedFile) return;
+    if (!this.validityStartDate) {
+      this.error = 'Validity Start Date is required.';
+      this.cdr.detectChanges();
+      return;
+    }
 
     this.loading = true;
     this.error = null;
@@ -98,7 +105,17 @@ export class UploadComponent implements OnInit {
 
     this.appInsights.trackEvent('FileUploadStart', { fileName: this.selectedFile.name });
 
-    this.apiService.uploadFile(this.selectedFile).subscribe({
+    let formattedDate = '';
+    if (this.validityStartDate) {
+      const parts = this.validityStartDate.split('-');
+      if (parts.length === 3) {
+        formattedDate = `${parts[2]}/${parts[1]}/${parts[0]}`; // Convert YYYY-MM-DD to DD/MM/YYYY
+      } else {
+        formattedDate = this.validityStartDate;
+      }
+    }
+
+    this.apiService.uploadFile(this.selectedFile, formattedDate).subscribe({
       next: (response) => {
         this.loading = false;
         this.successMessage = response.message || 'File uploaded successfully!';
@@ -120,6 +137,7 @@ export class UploadComponent implements OnInit {
 
   clear(): void {
     this.selectedFile = null;
+    this.validityStartDate = '';
     this.error = null;
     this.successMessage = null;
     this.cdr.detectChanges();

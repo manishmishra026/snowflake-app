@@ -2,59 +2,116 @@ import os
 import logging
 import azure.functions as func
 
-from shared_code import snowflake_connection, snowflake_service, file_engine
+from shared_code import snowflake_connection, snowflake_service, file_engine, config
 
 app = func.FunctionApp()
 
-@app.blob_trigger(arg_name="myblob", path="%AZURE_STORAGE_CONTAINER_NAME%/{name}",
-                  connection="mmstraccnt0001_STORAGE") 
-def file_processor(myblob: func.InputStream):
-    logging.info(f"--- File Processor Triggered ---")
-    logging.info(f"Blob Name: {myblob.name}")
-    logging.info(f"Blob Size: {myblob.length} bytes")
+# ==============================================================================
+# FUNCTION 1: Add User ID and Dates
+# ==============================================================================
+@app.blob_trigger(arg_name="myblob", 
+                  path="%INPUT_CONTAINER_1%/{name}",
+                  connection="AZURE_STORAGE_CONNECTION_STRING") 
+def webapp_add_user_id_dates(myblob: func.InputStream):
+    logging.info(f"--- Function 1: webapp_add_user_id_dates triggered ---")
+    logging.info(f"Blob Name: {myblob.name} | Size: {myblob.length} bytes")
     
-    connection_str = os.environ.get("mmstraccnt0001_STORAGE")
+    connection_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
     if not connection_str:
-        logging.error("mmstraccnt0001_STORAGE connection string not found in environment.")
+        logging.error("AZURE_STORAGE_CONNECTION_STRING connection string not found in environment.")
         return
 
-    # 1. Parse container name and blob name from trigger path
+    # Parse container name and blob name from the trigger path
     parts = myblob.name.split('/', 1)
     if len(parts) == 2:
         container_name, blob_name = parts[0], parts[1]
     else:
-        container_name = os.environ.get("AZURE_STORAGE_CONTAINER_NAME", "uploads")
+        container_name = os.environ.get("INPUT_CONTAINER_1")
         blob_name = myblob.name
 
-    # 2. Read and log blob metadata
+    if not container_name:
+        logging.error("Container name not found (INPUT_CONTAINER_1 not in environment).")
+        return
+
+    # Retrieve blob metadata from Azure Storage
     metadata = {}
     try:
         metadata = file_engine.read_blob_metadata(container_name, blob_name, connection_str)
-        logging.info(f"Blob Metadata: {metadata}")
+        logging.info(f"Retrieved Blob Metadata: {metadata}")
     except Exception as exc:
         logging.error(f"Failed to retrieve blob metadata: {exc}", exc_info=True)
 
-    # 3. Retrieve Snowflake data using Service Account Key Vault Authentication
+    # Read target values from metadata (case-insensitive checks)
+    normalized_metadata = {k.lower(): v for k, v in metadata.items()}
+    user_id = normalized_metadata.get("user_identification") or normalized_metadata.get("useridentification")
+    start_date = normalized_metadata.get("validity_start_date") or normalized_metadata.get("validitystartdate")
+    end_date = normalized_metadata.get("validity_end_date") or normalized_metadata.get("validityenddate") or "31/12/9999"
+
+    if not user_id or not start_date:
+        logging.error("mandatory properties not found in blob metadata")
+        logging.info("--- Function 1 execution completed ---")
+        return
+
+    logging.info(f"Processing with user_identification='{user_id}', validity_start_date='{start_date}', validity_end_date='{end_date}'")
+
+    try:
+        file_content = myblob.read()
+        
+        # Run Add User ID and Dates engine
+        updated_content = file_engine.add_user_id_and_dates(blob_name, file_content, user_id, start_date, end_date)
+        
+        # Upload to modified container
+        destination_container = os.environ.get("OUTPUT_CONTAINER_1")
+        if not destination_container:
+            logging.error("OUTPUT_CONTAINER_1 not found in environment.")
+            return
+        file_engine.upload_processed_file(blob_name, updated_content, destination_container, connection_str)
+        
+    except Exception as exc:
+        logging.error(f"Error during Function 1 execution flow: {exc}", exc_info=True)
+
+    logging.info(f"--- Function 1 execution completed ---")
+
+
+# ==============================================================================
+# FUNCTION 2: Fill Empty Cells (Combinatorial Expansion)
+# ==============================================================================
+@app.blob_trigger(arg_name="myblob", 
+                  path="%INPUT_CONTAINER_2%/{name}",
+                  connection="AZURE_STORAGE_CONNECTION_STRING") 
+def webapp_fill_empty_cells(myblob: func.InputStream):
+    logging.info(f"--- Function 2: webapp_fill_empty_cells triggered ---")
+    logging.info(f"Blob Name: {myblob.name} | Size: {myblob.length} bytes")
+    
+    connection_str = os.environ.get("AZURE_STORAGE_CONNECTION_STRING")
+    if not connection_str:
+        logging.error("AZURE_STORAGE_CONNECTION_STRING connection string not found in environment.")
+        return
+
+    # Parse container name and blob name from the trigger path
+    parts = myblob.name.split('/', 1)
+    if len(parts) == 2:
+        container_name, blob_name = parts[0], parts[1]
+    else:
+        container_name = os.environ.get("INPUT_CONTAINER_2")
+        blob_name = myblob.name
+
+    if not container_name:
+        logging.error("Container name not found (INPUT_CONTAINER_2 not in environment).")
+        return
+
+    # Retrieve Snowflake reference data
     snowflake_data = {}
     conn = None
     try:
-        logging.info("Connecting to Snowflake...")
+        logging.info("Connecting to Snowflake using Service Account credentials...")
         conn = snowflake_connection.create_snowflake_connection()
-        logging.info("Connected to Snowflake successfully. Listing tables...")
-        
-        tables = snowflake_service.list_tables(conn)
-        logging.info(f"Tables found in database: {[t[1] for t in tables]}")
-        
-        # Log and retrieve data for each table
-        for schema, table_name in tables:
-            logging.info(f"Retrieving data for table: {schema}.{table_name}")
-            # Get table data (limit 50 rows) to use as reference data for update
-            table_rows = snowflake_service.get_table_data(conn, schema, table_name, limit=50)
-            snowflake_data[table_name] = table_rows
-            logging.info(f"Successfully retrieved {len(table_rows)} rows for '{table_name}'")
-            
+        logging.info("Connected to Snowflake successfully. Retrieving lookup datasets...")
+        snowflake_data = snowflake_service.get_all_lookup_data(conn)
+        logging.info("Snowflake reference datasets loaded successfully.")
     except Exception as exc:
-        logging.error(f"Error during Snowflake database operations: {exc}", exc_info=True)
+        logging.error(f"Failed to retrieve reference datasets from Snowflake: {exc}", exc_info=True)
+        return
     finally:
         if conn:
             try:
@@ -63,21 +120,33 @@ def file_processor(myblob: func.InputStream):
             except Exception:
                 pass
 
-    # 4. Read Excel/CSV file content and run update engine
+    # Run processing and expansion logic
     try:
-        # Seek back to start if required and read blob bytes
-        myblob.seek(0)
         file_content = myblob.read()
         
-        # Call the update excel stub
-        logging.info("Processing Excel file updates...")
-        updated_content = file_engine.update_excel_file(file_content, snowflake_data)
+        logging.info("Running empty cell expansion engine...")
+        processed_content, recap_content, unresolved_content = file_engine.fill_empty_cells(
+            blob_name, file_content, snowflake_data
+        )
         
-        # 5. Upload the updated excel to the processed container
-        destination_container = os.environ.get("AZURE_STORAGE_PROCESSED_CONTAINER_NAME", "processed")
-        file_engine.upload_processed_file(blob_name, updated_content, destination_container, connection_str)
+        # Upload primary processed file
+        destination_container = os.environ.get("OUTPUT_CONTAINER_2")
+        if not destination_container:
+            logging.error("OUTPUT_CONTAINER_2 not found in environment.")
+            return
+        file_engine.upload_processed_file(blob_name, processed_content, destination_container, connection_str)
         
-    except Exception as exc:
-        logging.error(f"Error during file processing/upload flow: {exc}", exc_info=True)
+        # Upload Recap report if generated
+        if recap_content:
+            recap_name = f"recap/{os.path.splitext(blob_name)[0]}_RECAP.CSV"
+            file_engine.upload_processed_file(recap_name, recap_content, destination_container, connection_str)
 
-    logging.info(f"--- File Processor Execution Completed ---")
+        # Upload Unresolved report if generated
+        if unresolved_content:
+            unresolved_name = f"unresolved/{os.path.splitext(blob_name)[0]}_UNRESOLVED.CSV"
+            file_engine.upload_processed_file(unresolved_name, unresolved_content, destination_container, connection_str)
+            
+    except Exception as exc:
+        logging.error(f"Error during Function 2 execution flow: {exc}", exc_info=True)
+
+    logging.info(f"--- Function 2 execution completed ---")

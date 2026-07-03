@@ -119,7 +119,7 @@ export class ApiService {
   /**
    * Upload a CSV or XLSX file.
    */
-  uploadFile(file: File): Observable<any> {
+  uploadFile(file: File, validityStartDate?: string): Observable<any> {
     const authService = this.getAuthService();
     return from(authService.getAccessToken()).pipe(
       switchMap((token) => {
@@ -131,6 +131,9 @@ export class ApiService {
         });
         const formData = new FormData();
         formData.append('file', file, file.name);
+        if (validityStartDate) {
+          formData.append('validity_start_date', validityStartDate);
+        }
         
         const url = `${this.getBackendUrl()}/upload`;
         return this.http.post(url, formData, { headers });

@@ -8,4 +8,7 @@ azure-storage-blob
 azure-identity
 azure-keyvault-secrets==4.8.0
 cryptography
+pandas
+python-dotenv
+
 
