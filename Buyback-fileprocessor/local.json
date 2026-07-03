@@ -1,0 +1,22 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "DefaultEndpointsProtocol=https;AccountName=mmstraccnttestfn0001;AccountKey=DQWEyCaEHcWgN6u4y0leRfnQZ24bLgUJT1lE6/f1vFGaFuQb1jMmYtOWtvoz+pVGkH/Lheu0RFL9+ASted64EA==;EndpointSuffix=core.windows.net",
+    "FUNCTIONS_WORKER_RUNTIME": "python",
+    "AZURE_STORAGE_CONNECTION_STRING": "DefaultEndpointsProtocol=https;AccountName=mmstraccnttestfn0001;AccountKey=DQWEyCaEHcWgN6u4y0leRfnQZ24bLgUJT1lE6/f1vFGaFuQb1jMmYtOWtvoz+pVGkH/Lheu0RFL9+ASted64EA==;EndpointSuffix=core.windows.net",
+    "SNOWFLAKE_ACCOUNT": "dhhvjpy-sv13832",
+    "SNOWFLAKE_DATABASE": "SNOWFLAKE_SAMPLE_Apps",
+    "SNOWFLAKE_SCHEMA": "PUBLIC",
+    "SNOWFLAKE_WAREHOUSE": "COMPUTE_WH",
+    "SNOWFLAKE_ROLE": "WEBAPP_READER_ROLE",
+    "SNOWFLAKE_SERVICE_ACCOUNT_USER": "webapp_user",
+    "AZURE_KEYVAULT_URL": "",
+    "SNOWFLAKE_PRIVATE_KEY_SECRET_NAME": "snowflake-private-key",
+    "INPUT_CONTAINER_1": "webappuploads",
+    "OUTPUT_CONTAINER_1": "webapp-uploads-modifiedfiles",
+    "INPUT_CONTAINER_2": "fileprocessor-uploads",
+    "OUTPUT_CONTAINER_2": "fileprocessor-processed",
+    "SNOWFLAKE_SERVICE_ACCOUNT_PASSWORD": "ChangeMe123!",
+    "SNOWFLAKE_SERVICE_ACCOUNT_ROLE": "WEBAPP_READER_ROLE"
+  }
+}
