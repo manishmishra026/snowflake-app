@@ -1,42 +1,44 @@
 import logging
-from typing import Any, List, Tuple
+from typing import Any, List, Dict
 
-LIST_TABLES_QUERY = """
-    SELECT TABLE_SCHEMA, TABLE_NAME
-    FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_TYPE = 'BASE TABLE'
-    ORDER BY TABLE_SCHEMA, TABLE_NAME
-"""
-
-def list_tables(conn: Any) -> List[Tuple[str, str]]:
-    """Retrieves all base tables (schema, table_name) in the active database."""
+def fetch_table_rows(conn: Any, table_name: str, columns: List[str]) -> List[Dict[str, Any]]:
+    """Fetches specific columns for a specific table, converting result columns to lowercase."""
     cursor = conn.cursor()
-    try:
-        cursor.execute(LIST_TABLES_QUERY)
-        rows = cursor.fetchall()
-        return [(row[0], row[1]) for row in rows]
-    except Exception as exc:
-        logging.error(f"Failed to query tables list from Snowflake: {exc}", exc_info=True)
-        raise
-    finally:
-        cursor.close()
-
-def get_table_data(conn: Any, schema_name: str, table_name: str, limit: int = 50) -> List[dict]:
-    """Retrieves row data for a specific table."""
-    # Strip quotes for safety
-    safe_schema = schema_name.replace('"', '')
-    safe_table = table_name.replace('"', '')
-    
-    query = f'SELECT * FROM "{safe_schema}"."{safe_table}" LIMIT {limit}'
-    logging.info(f"Querying Snowflake table data: {query}")
-    cursor = conn.cursor()
+    columns_str = ", ".join(f'"{col}"' for col in columns)
+    # Try querying with double-quotes first
+    query = f'SELECT {columns_str} FROM "{table_name}"'
+    logging.info(f"Querying Snowflake table: {query}")
     try:
         cursor.execute(query)
         rows = cursor.fetchall()
-        columns = [desc[0] for desc in cursor.description]
-        return [dict(zip(columns, row)) for row in rows]
+        columns_lower = [col.lower() for col in columns]
+        return [dict(zip(columns_lower, row)) for row in rows]
     except Exception as exc:
-        logging.error(f"Failed to fetch data for table {safe_schema}.{safe_table}: {exc}", exc_info=True)
-        raise
+        logging.warning(f"Failed to query '{table_name}' with quotes. Retrying without quotes... Error: {exc}")
+        try:
+            fallback_columns_str = ", ".join(columns)
+            fallback_query = f'SELECT {fallback_columns_str} FROM {table_name}'
+            cursor.execute(fallback_query)
+            rows = cursor.fetchall()
+            columns_lower = [col.lower() for col in columns]
+            return [dict(zip(columns_lower, row)) for row in rows]
+        except Exception as retry_exc:
+            logging.error(f"Failed to fetch data for table {table_name}: {retry_exc}", exc_info=True)
+            raise retry_exc
     finally:
         cursor.close()
+
+def get_all_lookup_data(conn: Any) -> Dict[str, List[Dict[str, Any]]]:
+    """Retrieves lookup datasets for all 4 tables required by the fill-empty-cells logic."""
+    required_columns = {
+        "CFA_TRANSCODED": ["country", "brand_name", "lcdv"],
+        "REFERENCIAL_DATA_UCDM": ["country_id", "brand_id", "lcdv_16", "motor_id"],
+        "BB_LEGAL_ENTITY": ["legal_entity_code", "country", "brand"],
+        "ENT_UC_STOCK_IMAGE": ["cd_country_code", "cd_brand_code", "cd_lcdv_code"]
+    }
+    data = {}
+    for table, columns in required_columns.items():
+        logging.info(f"Fetching Snowflake table: {table}")
+        data[table] = fetch_table_rows(conn, table, columns)
+        logging.info(f"Successfully loaded {len(data[table])} rows for table '{table}'")
+    return data

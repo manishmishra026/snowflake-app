@@ -1,6 +1,6 @@
 import logging
 import os
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from azure.storage.blob import BlobServiceClient
 from azure.identity import DefaultAzureCredential
 
@@ -51,6 +51,7 @@ def get_blob_service_client() -> BlobServiceClient:
 @router.post("", response_model=UploadResponse)
 async def upload_file(
     file: UploadFile = File(...),
+    validity_start_date: str = Form(None),
     token_payload: dict = Depends(verify_api_token)
 ) -> UploadResponse:
     """Upload a CSV or XLSX file to Azure Storage Blob Container with user email metadata."""
@@ -101,8 +102,11 @@ async def upload_file(
         
         metadata = {
             "email": user_email,
-            "uploaded_by": user_email
+            "uploaded_by": user_email,
+            "user_identification": user_email
         }
+        if validity_start_date:
+            metadata["validity_start_date"] = validity_start_date
         
         logger.info("Uploading blob %s to container %s", filename, container_name)
         blob_client.upload_blob(file_content, overwrite=True, metadata=metadata)

@@ -72,6 +72,19 @@
         <button class="btn btn-remove" (click)="clear()">Remove</button>
       </div>
 
+      <!-- Date Input Field -->
+      <div *ngIf="selectedFile && !loading" class="form-group">
+        <label for="validityStartDate">Validity Start Date (Required)</label>
+        <input 
+          type="date" 
+          id="validityStartDate" 
+          name="validityStartDate" 
+          [(ngModel)]="validityStartDate" 
+          class="form-control"
+          required
+        >
+      </div>
+
       <!-- Loading / Progress View -->
       <div *ngIf="loading" class="loading-container">
         <div class="spinner"></div>
