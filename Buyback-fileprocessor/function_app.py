@@ -126,7 +126,7 @@ def webapp_fill_empty_cells(myblob: func.InputStream):
         
         logging.info("Running empty cell expansion engine...")
         processed_content, recap_content, unresolved_content = file_engine.fill_empty_cells(
-            blob_name, file_content, snowflake_data
+            file_content, snowflake_data
         )
         
         # Upload primary processed file

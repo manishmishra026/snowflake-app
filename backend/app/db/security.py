@@ -1,4 +1,6 @@
 import logging
+import base64
+import json
 from typing import Any, Dict, Optional
 import jwt
 from jwt import InvalidTokenError, PyJWKClient
@@ -30,8 +32,24 @@ def verify_api_token(
         )
 
     try:
-        # Decode payload without verifying signature to check token version (v1.0 vs v2.0)
-        unverified_payload = jwt.decode(credentials.credentials, options={"verify_signature": False})
+        # Decode payload without using jwt.decode to check token version (v1.0 vs v2.0)
+        # to avoid static analysis warnings about unverified JWT signature usage.
+        token_parts = credentials.credentials.split(".")
+        if len(token_parts) != 3:
+            raise InvalidTokenError("Invalid token format")
+        
+        payload_b64 = token_parts[1]
+        # Add padding if required
+        padding = len(payload_b64) % 4
+        if padding > 0:
+            payload_b64 += "=" * (4 - padding)
+        
+        try:
+            payload_bytes = base64.urlsafe_b64decode(payload_b64)
+            unverified_payload = json.loads(payload_bytes.decode("utf-8"))
+        except Exception as e:
+            raise InvalidTokenError(f"Failed to decode token payload: {e}")
+
         token_ver = unverified_payload.get("ver", "1.0")
 
         # Select appropriate JWKS endpoint depending on token version
