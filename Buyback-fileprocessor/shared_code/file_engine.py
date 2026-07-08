@@ -565,6 +565,29 @@ def _expand_channel(candidates: List[dict], original_val: Any, country: str or N
             expanded.append(nc)
     return expanded, channels
 
+def _get_candidate_pairs_resolved(c: dict, country: str or None, lookups: dict) -> List[Tuple]:
+    brand = c.get("Brand")
+    if is_empty(brand):
+        return []
+
+    lcdv_in = c.get("LCDV_group")
+    if is_empty(lcdv_in):
+        lcdv_in = None
+
+    energy_in = c.get("Energy_type")
+    if is_empty(energy_in):
+        energy_in = None
+
+    return resolve_lcdv_energy(lcdv_in, energy_in, str(country or ""), str(brand), lookups)
+
+def _expand_candidate_with_pairs(c: dict, pairs: List[Tuple], expanded: List[dict]) -> None:
+    for (lv, ev) in pairs:
+        nc = c.copy()
+        nc["LCDV_group"] = lv
+        if is_empty(nc.get("Energy_type")):
+            nc["Energy_type"] = ev
+        expanded.append(nc)
+
 def _expand_lcdv_energy(
     candidates: List[dict],
     original_lcdv: Any,
@@ -573,30 +596,18 @@ def _expand_lcdv_energy(
     lookups: dict
 ) -> List[dict]:
     lcdv_empty = is_empty(original_lcdv)
-    lcdv_is_partial = not lcdv_empty
     energy_empty = is_empty(original_energy)
 
-    if not (lcdv_empty or lcdv_is_partial or energy_empty):
+    if not (lcdv_empty or not lcdv_empty or energy_empty):
         return candidates
 
     expanded = []
     for c in candidates:
-        brand = c.get("Brand")
-        if is_empty(brand):
+        pairs = _get_candidate_pairs_resolved(c, country, lookups)
+        if not pairs:
             expanded.append(c)
-            continue
-
-        lcdv_in = None if is_empty(c.get("LCDV_group")) else c.get("LCDV_group")
-        energy_in = None if is_empty(c.get("Energy_type")) else c.get("Energy_type")
-
-        pairs = resolve_lcdv_energy(lcdv_in, energy_in, str(country or ""), str(brand), lookups)
-
-        for (lv, ev) in pairs:
-            nc = c.copy()
-            nc["LCDV_group"] = lv
-            if is_empty(nc.get("Energy_type")):
-                nc["Energy_type"] = ev
-            expanded.append(nc)
+        else:
+            _expand_candidate_with_pairs(c, pairs, expanded)
 
     return expanded
 
@@ -612,6 +623,32 @@ def _expand_row(row_dict: dict, le_info: dict, country: str or None, lookups: di
 
     return candidates, usable_brands, channels
 
+def _get_brands_check(row_dict: dict, usable_brands: List[str]) -> List[str]:
+    brand_val = row_dict.get("Brand")
+    if not is_empty(brand_val):
+        return [brand_val]
+    return usable_brands
+
+def _get_brand_recap_counts(b: str, country: str or None, e_val: str or None, lookups: dict) -> Tuple[int, int, int]:
+    grp = get_brand_group(b)
+    if grp in ("PCD", "OV"):
+        if e_val:
+            tot = len(lookups["ref_cbm"].get((country, b, e_val), set()))
+        else:
+            tot = len(lookups["ref_cb"].get((country, b), set()))
+        return tot, 0, 0
+        
+    if grp == "FCA":
+        if e_val:
+            tot_cfa = len(lookups["cfa_cbe"].get((country, b, e_val), set()))
+            tot_ent = len(lookups["ent_cbe"].get((country, b, e_val), set()))
+        else:
+            tot_cfa = len({lv for lv, _ in lookups["cfa_cb"].get((country, b), set())})
+            tot_ent = len({lv for lv, _ in lookups["ent_cb"].get((country, b), set())})
+        return 0, tot_cfa, tot_ent
+        
+    return 0, 0, 0
+
 def _add_recap_lcdv_energy_records(
     row_dict: dict,
     header: str,
@@ -621,24 +658,18 @@ def _add_recap_lcdv_energy_records(
     recap_long: List[dict]
 ) -> None:
     """Generates and appends recap entries for LCDV / Energy fields."""
-    ref_cbm = lookups["ref_cbm"]
-    ref_cb = lookups["ref_cb"]
-    cfa_cbe = lookups["cfa_cbe"]
-    cfa_cb = lookups["cfa_cb"]
-    ent_cbe = lookups["ent_cbe"]
-    ent_cb = lookups["ent_cb"]
-
-    brands_check = [row_dict.get("Brand")] if not is_empty(row_dict.get("Brand")) else usable_brands
+    brands_check = _get_brands_check(row_dict, usable_brands)
     tot_ref = tot_cfa = tot_ent = 0
-    e_val = None if is_empty(row_dict.get("Energy_type")) else row_dict.get("Energy_type")
+    
+    e_val = row_dict.get("Energy_type")
+    if is_empty(e_val):
+        e_val = None
 
     for b in brands_check:
-        grp = get_brand_group(b)
-        if grp in ("PCD", "OV"):
-            tot_ref += len(ref_cbm.get((country, b, e_val), set()) if e_val else ref_cb.get((country, b), set()))
-        elif grp == "FCA":
-            tot_cfa += len(cfa_cbe.get((country, b, e_val), set()) if e_val else set(lv for lv, _ in cfa_cb.get((country, b), set())))
-            tot_ent += len(ent_cbe.get((country, b, e_val), set()) if e_val else set(lv for lv, _ in ent_cb.get((country, b), set())))
+        dr, dc, de = _get_brand_recap_counts(b, country, e_val, lookups)
+        tot_ref += dr
+        tot_cfa += dc
+        tot_ent += de
 
     if tot_ref:
         recap_long.append({KEY_EMPTY_CELL: "Referentiel V2", "cell": header, "count": tot_ref})
