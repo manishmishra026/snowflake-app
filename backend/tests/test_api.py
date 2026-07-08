@@ -135,7 +135,7 @@ def test_upload_file_success_mocked():
             mock_blob_client.upload_blob.assert_called_once_with(
                 b"col1,col2\nval1,val2", 
                 overwrite=True, 
-                metadata={"email": "user@example.com", "uploaded_by": "user@example.com"}
+                metadata={"email": "user@example.com", "uploaded_by": "user@example.com", "user_identification": "user@example.com"}
             )
     finally:
         app.dependency_overrides.clear()
