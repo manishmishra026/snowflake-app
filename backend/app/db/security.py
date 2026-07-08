@@ -12,6 +12,75 @@ logger = logging.getLogger("app")
 security = HTTPBearer(auto_error=False)
 
 
+def _decode_unverified_payload(token: str) -> Dict[str, Any]:
+    """Decodes the JWT payload without verifying its signature."""
+    token_parts = token.split(".")
+    if len(token_parts) != 3:
+        raise InvalidTokenError("Invalid token format")
+    
+    payload_b64 = token_parts[1]
+    # Add padding if required
+    padding = len(payload_b64) % 4
+    if padding > 0:
+        payload_b64 += "=" * (4 - padding)
+    
+    try:
+        payload_bytes = base64.urlsafe_b64decode(payload_b64)
+        return json.loads(payload_bytes.decode("utf-8"))
+    except Exception as e:
+        raise InvalidTokenError(f"Failed to decode token payload: {e}")
+
+def _verify_signature_and_claims(token: str, token_ver: str, allowed_audiences: list) -> Dict[str, Any]:
+    """Verifies the JWT signature using keys from discovery URI."""
+    if token_ver == "2.0":
+        jwks_uri = settings.azure_jwks_uri
+    else:
+        jwks_uri = f"https://login.microsoftonline.com/{settings.AZURE_TENANT_ID}/discovery/keys"
+
+    # Load keys from selected JWKS endpoint
+    jwk_client = PyJWKClient(jwks_uri)
+    signing_key = jwk_client.get_signing_key_from_jwt(token)
+
+    # Decode and validate token claims
+    return jwt.decode(
+        token,
+        signing_key.key,
+        algorithms=["RS256"],
+        audience=allowed_audiences,
+        options={"verify_exp": True, "verify_aud": True, "verify_iss": False},
+    )
+
+def _validate_token_claims_and_client(payload: Dict[str, Any]) -> None:
+    """Performs tenant, issuer, scopes, and client validation."""
+    # Verify issuer
+    token_iss = payload.get("iss")
+    allowed_issuers = [
+        settings.azure_issuer,
+        f"https://sts.windows.net/{settings.AZURE_TENANT_ID}/",
+        f"https://sts.windows.net/{settings.AZURE_TENANT_ID}",
+    ]
+    if token_iss not in allowed_issuers:
+        raise InvalidTokenError(f"Invalid issuer: {token_iss}")
+
+    # Verify scope contains user_impersonation
+    scp = payload.get("scp", "")
+    scopes_list = [s.strip() for s in scp.split(" ") if s.strip()]
+    if "user_impersonation" not in scopes_list:
+        raise InvalidTokenError("Required scope 'user_impersonation' missing in token")
+
+    # Verify the client application is allowed to call this API (checking appid or azp claim)
+    client_app_id = payload.get("appid") or payload.get("azp")
+    if not client_app_id:
+        raise InvalidTokenError("Client application ID claim (appid/azp) missing in token")
+
+    allowed_clients = settings.allowed_client_ids_list
+    if client_app_id not in allowed_clients:
+        logger.warning("Access denied: Client App ID '%s' is not in the allowed clients list", client_app_id)
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Access denied: Client ID {client_app_id} is not authorized to access this API",
+        )
+
 def verify_api_token(
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> Dict[str, Any]:
@@ -32,35 +101,8 @@ def verify_api_token(
         )
 
     try:
-        # Decode payload without using jwt.decode to check token version (v1.0 vs v2.0)
-        # to avoid static analysis warnings about unverified JWT signature usage.
-        token_parts = credentials.credentials.split(".")
-        if len(token_parts) != 3:
-            raise InvalidTokenError("Invalid token format")
-        
-        payload_b64 = token_parts[1]
-        # Add padding if required
-        padding = len(payload_b64) % 4
-        if padding > 0:
-            payload_b64 += "=" * (4 - padding)
-        
-        try:
-            payload_bytes = base64.urlsafe_b64decode(payload_b64)
-            unverified_payload = json.loads(payload_bytes.decode("utf-8"))
-        except Exception as e:
-            raise InvalidTokenError(f"Failed to decode token payload: {e}")
-
+        unverified_payload = _decode_unverified_payload(credentials.credentials)
         token_ver = unverified_payload.get("ver", "1.0")
-
-        # Select appropriate JWKS endpoint depending on token version
-        if token_ver == "2.0":
-            jwks_uri = settings.azure_jwks_uri
-        else:
-            jwks_uri = f"https://login.microsoftonline.com/{settings.AZURE_TENANT_ID}/discovery/keys"
-
-        # Load keys from selected JWKS endpoint
-        jwk_client = PyJWKClient(jwks_uri)
-        signing_key = jwk_client.get_signing_key_from_jwt(credentials.credentials)
 
         # Determine allowed audiences (API Client ID and api://<API Client ID>)
         allowed_audiences = [
@@ -68,44 +110,14 @@ def verify_api_token(
             f"api://{settings.BACKEND_API_CLIENT_ID}"
         ]
 
-        # Decode and validate token claims
-        payload = jwt.decode(
-            credentials.credentials,
-            signing_key.key,
-            algorithms=["RS256"],
-            audience=allowed_audiences,
-            options={"verify_exp": True, "verify_aud": True, "verify_iss": False},
-        )
+        # Verify signature and decode claims
+        payload = _verify_signature_and_claims(credentials.credentials, token_ver, allowed_audiences)
 
-        # Verify issuer
-        token_iss = payload.get("iss")
-        allowed_issuers = [
-            settings.azure_issuer,
-            f"https://sts.windows.net/{settings.AZURE_TENANT_ID}/",
-            f"https://sts.windows.net/{settings.AZURE_TENANT_ID}",
-        ]
-        if token_iss not in allowed_issuers:
-            raise InvalidTokenError(f"Invalid issuer: {token_iss}")
+        # Validate claims & client app
+        _validate_token_claims_and_client(payload)
 
-        # Verify scope contains user_impersonation
-        scp = payload.get("scp", "")
-        scopes_list = [s.strip() for s in scp.split(" ") if s.strip()]
-        if "user_impersonation" not in scopes_list:
-            raise InvalidTokenError("Required scope 'user_impersonation' missing in token")
-
-        # Verify the client application is allowed to call this API (checking appid or azp claim)
+        # Retrieve client app ID for logging
         client_app_id = payload.get("appid") or payload.get("azp")
-        if not client_app_id:
-            raise InvalidTokenError("Client application ID claim (appid/azp) missing in token")
-
-        allowed_clients = settings.allowed_client_ids_list
-        if client_app_id not in allowed_clients:
-            logger.warning("Access denied: Client App ID '%s' is not in the allowed clients list", client_app_id)
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Access denied: Client ID {client_app_id} is not authorized to access this API",
-            )
-
         logger.info("Request authenticated successfully for client app: %s", client_app_id)
         return payload
 
