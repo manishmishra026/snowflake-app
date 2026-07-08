@@ -445,70 +445,101 @@ def fill_range_gaps(rows: List[dict], colors: List[str or None], key_cols: List[
         "gap_rows": s_gap_rows,
     }
 
-def _build_lookups(snowflake_data: Dict[str, List[Dict[str, Any]]]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
-    """Builds the resolution lookup tables from Snowflake data."""
-    # A. BB_LEGAL_ENTITY -> compat_le
+def _build_compat_le(rows: List[dict]) -> Dict[str, dict]:
+    """Helper to build legal entity compatibility mapping."""
     compat_le = {}
-    for row in snowflake_data.get("BB_LEGAL_ENTITY", []):
+    for row in rows:
         le_code = row.get("legal_entity_code")
-        country = row.get("country")
-        brand_str = str(row.get("brand") or "")
-        brands_raw = [b.strip() for b in brand_str.split() if b.strip()]
-        brands = [b for b in brands_raw if b not in config.BRANDS_IGNORED]
-        if le_code and not is_empty(le_code):
-            compat_le[str(le_code).strip()] = {
-                "country": str(country).strip() if not is_empty(country) else None,
-                "brands": brands,
-            }
+        if not le_code or is_empty(le_code):
+            continue
 
-    # B. REFERENCIAL_DATA_UCDM -> ref_cbm, ref_cb
-    from collections import defaultdict
-    ref_cbm = defaultdict(set)
-    ref_cb = defaultdict(set)
-    for row in snowflake_data.get("REFERENCIAL_DATA_UCDM", []):
+        country = row.get("country")
+        country_clean = str(country).strip() if not is_empty(country) else None
+
+        brand_str = str(row.get("brand") or "")
+        brands_raw = [b.strip() for b in brand_str.split()]
+        brands = [b for b in brands_raw if b and b not in config.BRANDS_IGNORED]
+
+        compat_le[str(le_code).strip()] = {
+            "country": country_clean,
+            "brands": brands,
+        }
+    return compat_le
+
+def _build_ref_lookups(rows: List[dict], ref_cbm: dict, ref_cb: dict) -> None:
+    """Helper to populate UCDM reference table mappings."""
+    for row in rows:
         c_id = row.get("country_id")
         b_id = row.get("brand_id")
         l_16 = _clean_lcdv(row.get("lcdv_16"))
         m_id = row.get("motor_id")
-        if not (is_empty(c_id) or is_empty(b_id) or is_empty(l_16) or is_empty(m_id)):
-            c_id = str(c_id).strip()
-            b_id = str(b_id).strip()
-            l_16 = str(l_16).strip()
-            m_id = str(m_id).strip()
-            ref_cbm[(c_id, b_id, m_id)].add(l_16)
-            ref_cb[(c_id, b_id)].add((l_16, m_id))
 
-    # C. CFA_TRANSCODED -> cfa_cbe, cfa_cb
-    cfa_cbe = defaultdict(set)
-    cfa_cb = defaultdict(set)
-    for row in snowflake_data.get("CFA_TRANSCODED", []):
+        if is_empty(c_id) or is_empty(b_id) or is_empty(l_16) or is_empty(m_id):
+            continue
+
+        c_id = str(c_id).strip()
+        b_id = str(b_id).strip()
+        l_16 = str(l_16).strip()
+        m_id = str(m_id).strip()
+        ref_cbm[(c_id, b_id, m_id)].add(l_16)
+        ref_cb[(c_id, b_id)].add((l_16, m_id))
+
+def _build_cfa_lookups(rows: List[dict], cfa_cbe: dict, cfa_cb: dict) -> None:
+    """Helper to populate CFA transcode reference table mappings."""
+    for row in rows:
         c = row.get("country")
         b = row.get("brand_name")
         lv = _clean_lcdv(row.get("lcdv"))
-        if not (is_empty(c) or is_empty(b) or is_empty(lv)):
-            c = str(c).strip()
-            b = str(b).strip()
-            lv = str(lv).strip()
-            if len(lv) >= 9:
-                energy = lv[7:9]
-                cfa_cbe[(c, b, energy)].add(lv)
-                cfa_cb[(c, b)].add((lv, energy))
 
-    # D. ENT_UC_STOCK_IMAGE -> ent_cbe, ent_cb
-    ent_cbe = defaultdict(set)
-    ent_cb = defaultdict(set)
-    for row in snowflake_data.get("ENT_UC_STOCK_IMAGE", []):
+        if is_empty(c) or is_empty(b) or is_empty(lv):
+            continue
+
+        c = str(c).strip()
+        b = str(b).strip()
+        lv = str(lv).strip()
+        if len(lv) < 9:
+            continue
+
+        energy = lv[7:9]
+        cfa_cbe[(c, b, energy)].add(lv)
+        cfa_cb[(c, b)].add((lv, energy))
+
+def _build_ent_lookups(rows: List[dict], ent_cbe: dict, ent_cb: dict) -> None:
+    """Helper to populate ENT stock image reference table mappings."""
+    for row in rows:
         c = row.get("cd_country_code")
         b = row.get("cd_brand_code")
         lv = _clean_lcdv(row.get("cd_lcdv_code"))
-        if not (is_empty(c) or is_empty(b) or is_empty(lv)):
-            c = str(c).strip()
-            b = str(b).strip()
-            lv = str(lv).strip()
-            if len(lv) >= 9:
-                energy = lv[7:9]
-                ent_cbe[(c, b, energy)].add(lv)
-                ent_cb[(c, b)].add((lv, energy))
+
+        if is_empty(c) or is_empty(b) or is_empty(lv):
+            continue
+
+        c = str(c).strip()
+        b = str(b).strip()
+        lv = str(lv).strip()
+        if len(lv) < 9:
+            continue
+
+        energy = lv[7:9]
+        ent_cbe[(c, b, energy)].add(lv)
+        ent_cb[(c, b)].add((lv, energy))
+
+def _build_lookups(snowflake_data: Dict[str, List[Dict[str, Any]]]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Builds the resolution lookup tables from Snowflake data."""
+    compat_le = _build_compat_le(snowflake_data.get("BB_LEGAL_ENTITY", []))
+
+    from collections import defaultdict
+    ref_cbm = defaultdict(set)
+    ref_cb = defaultdict(set)
+    _build_ref_lookups(snowflake_data.get("REFERENCIAL_DATA_UCDM", []), ref_cbm, ref_cb)
+
+    cfa_cbe = defaultdict(set)
+    cfa_cb = defaultdict(set)
+    _build_cfa_lookups(snowflake_data.get("CFA_TRANSCODED", []), cfa_cbe, cfa_cb)
+
+    ent_cbe = defaultdict(set)
+    ent_cb = defaultdict(set)
+    _build_ent_lookups(snowflake_data.get("ENT_UC_STOCK_IMAGE", []), ent_cbe, ent_cb)
 
     lookups = {
         "ref_cbm": ref_cbm,
@@ -714,6 +745,87 @@ def _add_recap_records(
         elif col in ("LCDV_group", "Energy_type"):
             _add_recap_lcdv_energy_records(row_dict, header, usable_brands, country, lookups, recap_long)
 
+def _process_input_row(
+    row_dict: dict,
+    src_idx: int,
+    df_columns: List[str],
+    compat_le: dict,
+    lookups: dict,
+    output_rows: List[dict],
+    output_colors: List[str or None],
+    recap_long: List[dict],
+    unresolved: List[dict]
+) -> None:
+    """Helper to process a single input row for empty cell filling."""
+    lcdv_raw = row_dict.get("LCDV_group")
+    seven_cols = list(df_columns[:7])
+
+    source_has_empty = False
+    for col in seven_cols:
+        if is_empty(row_dict.get(col)):
+            source_has_empty = True
+            break
+
+    source_lcdv_present = not is_empty(lcdv_raw)
+
+    if not source_has_empty and not source_lcdv_present:
+        output_rows.append(row_dict)
+        output_colors.append(None)
+        return
+
+    le_info = compat_le.get(str(row_dict.get("Legal_Entity")) or "", {})
+    country = le_info.get("country")
+    
+    candidates, usable_brands, channels = _expand_row(row_dict, le_info, country, lookups)
+
+    # Row Classification
+    for c in candidates:
+        has_vides = False
+        for col in seven_cols:
+            if is_empty(c.get(col)):
+                has_vides = True
+                break
+
+        if has_vides:
+            unresolved.append(c)
+        else:
+            output_rows.append(c)
+            if source_has_empty:
+                output_colors.append("green")
+            else:
+                output_colors.append(None)
+
+    # Recap statistics aggregation
+    if source_has_empty:
+        _add_recap_records(row_dict, src_idx, df_columns, usable_brands, channels, country, lookups, recap_long)
+
+def _compile_recap_report(recap_long: List[dict]) -> bytes or None:
+    """Helper to compile and format the recap report bytes."""
+    if not recap_long:
+        return None
+    df_rl = pd.DataFrame(recap_long)
+    df_recap = df_rl.pivot_table(
+        index=KEY_EMPTY_CELL,
+        columns="cell",
+        values="count",
+        aggfunc="sum",
+        fill_value=""
+    )
+    df_recap.columns.name = None
+    recap_stream = io.StringIO()
+    df_recap.to_csv(recap_stream, sep=";", encoding="utf-8-sig")
+    return recap_stream.getvalue().encode("utf-8-sig")
+
+def _compile_unresolved_report(unresolved: List[dict], df_columns: List[str]) -> bytes or None:
+    """Helper to compile and format the unresolved report bytes."""
+    if not unresolved:
+        return None
+    df_unres = pd.DataFrame(unresolved, columns=df_columns)
+    df_unres = df_unres.drop_duplicates()
+    unres_stream = io.StringIO()
+    df_unres.to_csv(unres_stream, sep=";", index=False, encoding="utf-8-sig")
+    return unres_stream.getvalue().encode("utf-8-sig")
+
 def fill_empty_cells(file_content: bytes, snowflake_data: Dict[str, List[Dict[str, Any]]]) -> Tuple[bytes, bytes or None, bytes or None]:
     """Implements Script 2 logic using Snowflake datasets instead of local CSV/Excel files."""
     
@@ -744,32 +856,17 @@ def fill_empty_cells(file_content: bytes, snowflake_data: Dict[str, List[Dict[st
     unresolved = []
 
     for src_idx, row_dict in enumerate(all_rows):
-        lcdv_raw = row_dict.get("LCDV_group")
-        source_has_empty = any(is_empty(row_dict.get(col)) for col in df_in.columns[:7])
-        source_lcdv_present = not is_empty(lcdv_raw)
-
-        if not source_has_empty and not source_lcdv_present:
-            output_rows.append(row_dict)
-            output_colors.append(None)
-            continue
-
-        le_info = compat_le.get(str(row_dict.get("Legal_Entity")) or "", {})
-        country = le_info.get("country")
-        
-        candidates, usable_brands, channels = _expand_row(row_dict, le_info, country, lookups)
-
-        # Row Classification
-        for c in candidates:
-            n_vides = sum(1 for col in df_in.columns[:7] if is_empty(c.get(col)))
-            if n_vides > 0:
-                unresolved.append(c)
-            else:
-                output_rows.append(c)
-                output_colors.append("green" if source_has_empty else None)
-
-        # Recap statistics aggregation
-        if source_has_empty:
-            _add_recap_records(row_dict, src_idx, df_in.columns, usable_brands, channels, country, lookups, recap_long)
+        _process_input_row(
+            row_dict,
+            src_idx,
+            df_in.columns,
+            compat_le,
+            lookups,
+            output_rows,
+            output_colors,
+            recap_long,
+            unresolved
+        )
 
     # Range gap completion (KM)
     range_key_cols = list(df_in.columns[:7])
@@ -801,29 +898,8 @@ def fill_empty_cells(file_content: bytes, snowflake_data: Dict[str, List[Dict[st
     df_out.to_csv(processed_stream, sep=sep, index=False, encoding="utf-8-sig")
     processed_bytes = processed_stream.getvalue().encode("utf-8-sig")
 
-    # Recap report
-    recap_bytes = None
-    if recap_long:
-        df_rl = pd.DataFrame(recap_long)
-        df_recap = df_rl.pivot_table(
-            index=KEY_EMPTY_CELL,
-            columns="cell",
-            values="count",
-            aggfunc="sum",
-            fill_value=""
-        )
-        df_recap.columns.name = None
-        recap_stream = io.StringIO()
-        df_recap.to_csv(recap_stream, sep=";", encoding="utf-8-sig")
-        recap_bytes = recap_stream.getvalue().encode("utf-8-sig")
-
-    # Unresolved report
-    unresolved_bytes = None
-    if unresolved:
-        df_unres = pd.DataFrame(unresolved, columns=df_in.columns)
-        df_unres = df_unres.drop_duplicates()
-        unres_stream = io.StringIO()
-        df_unres.to_csv(unres_stream, sep=";", index=False, encoding="utf-8-sig")
-        unresolved_bytes = unres_stream.getvalue().encode("utf-8-sig")
+    # Compile Reports
+    recap_bytes = _compile_recap_report(recap_long)
+    unresolved_bytes = _compile_unresolved_report(unresolved, df_in.columns)
 
     return processed_bytes, recap_bytes, unresolved_bytes
