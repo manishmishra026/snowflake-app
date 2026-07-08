@@ -31,7 +31,7 @@ def test_fill_range_gaps():
     ]
     colors = [None, None]
     key_cols = ["Legal_Entity", "Brand", "standardized_UC_Origin_Channel", "LCDV_group", "nv_uc", "Scenario", "Energy_type"]
-    new_rows, new_colors, stats = file_engine.fill_range_gaps(rows, colors, key_cols, "Km_minimum", "Km_maximum", 9999999.0)
+    new_rows, _, _ = file_engine.fill_range_gaps(rows, colors, key_cols, "Km_minimum", "Km_maximum", 9999999.0)
     assert len(new_rows) == 2
     assert new_rows[1]["Km_minimum"] == 0
 
@@ -55,5 +55,5 @@ def test_fill_empty_cells():
         "LE1;AP;C1;1234567890123456;NV;RE;E1;1000;5000;12;24\n"
         "LE1;;1;;;;;1000;5000;12;24\n"
     ).encode("utf-8-sig")
-    processed, recap, unresolved = file_engine.fill_empty_cells(csv_content, snowflake_data)
+    processed, _, _ = file_engine.fill_empty_cells(csv_content, snowflake_data)
     assert processed is not None

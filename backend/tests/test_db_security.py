@@ -30,7 +30,7 @@ def test_connection_pool_get_and_release():
     assert pool._created_count == 1
 
     # Acquire second connection
-    conn2 = pool.get_connection()
+    _ = pool.get_connection()
     assert pool._created_count == 2
 
     # Attempting to get third connection should block and raise exception on queue timeout
