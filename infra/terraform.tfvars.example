@@ -1,0 +1,63 @@
+# ==============================================================================
+# Sample Variable Values for Azure Terraform Deployment
+# Copy this file to terraform.tfvars and customize with your environment values.
+# ==============================================================================
+
+location     = "eastus"
+environment  = "dev"
+project_name = "snowflake"
+
+# Naming Convention Overrides (Optional - leave empty strings to auto-generate based on naming rules)
+resource_group_name           = "rg-snowflake-dev"
+app_service_plan_name         = "asp-snowflake-dev"
+app_service_name              = "app-snowflake-dev"
+function_app_name             = "func-snowflake-dev"
+storage_account_name          = "stsnowflakedev"
+log_analytics_workspace_name = "log-snowflake-dev"
+app_gateway_name              = "agw-snowflake-dev"
+data_collection_endpoint_name = "dce-snowflake-dev"
+data_collection_rule_name     = "dcr-snowflake-dev"
+action_group_name             = "ag-snowflake-dev"
+
+# Existing VNet and Subnet Details (Provided by user)
+vnet_name                = "vnet-existing-eastus"
+vnet_resource_group_name = "rg-network-eastus"
+agw_subnet_name          = "snet-agw"
+pe_subnet_name           = "snet-pe"
+app_subnet_name          = "snet-app"
+func_subnet_name         = "snet-func"
+
+# Application Gateway Static Private IP
+agw_private_ip_address   = "10.0.1.10"
+agw_sku_name             = "Standard_v2"
+agw_sku_tier             = "Standard_v2"
+agw_capacity             = 2
+
+# Compute Configuration
+app_service_plan_sku     = "P1v3"
+python_version           = "3.12"
+
+# Monitoring & Custom Log Configuration
+custom_log_table_name    = "AppCustomLog_CL"
+custom_log_stream_name   = "Custom-AppCustomLog_CL"
+
+custom_log_columns = [
+  { name = "TimeGenerated", type = "datetime" },
+  { name = "RawData",       type = "string" },
+  { name = "Message",       type = "string" },
+  { name = "Severity",      type = "string" },
+  { name = "Logger",       type = "string" },
+  { name = "AppVersion",   type = "string" }
+]
+
+# Email addresses to receive alerts
+alert_email_addresses = [
+  "admin@example.com",
+  "devops@example.com"
+]
+
+tags = {
+  Environment = "dev"
+  Project     = "snowflake"
+  ManagedBy   = "Terraform"
+}

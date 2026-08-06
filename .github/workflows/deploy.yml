@@ -1,0 +1,122 @@
+name: "Deploy Azure Infrastructure with Terraform"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - ".github/workflows/deploy.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - ".github/workflows/deploy.yml"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Select target deployment environment (preprod or prod)"
+        required: true
+        default: "preprod"
+        type: choice
+        options:
+          - preprod
+          - prod
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  setup-env:
+    name: "Determine Target Environment"
+    runs-on: ubuntu-latest
+    outputs:
+      target_env: ${{ steps.select_env.outputs.target_env }}
+    steps:
+      - name: Select Environment Name
+        id: select_env
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TARGET_ENV="${{ github.event.inputs.environment }}"
+          elif [ "${{ github.event_name }}" = "push" ] && [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            TARGET_ENV="prod"
+          else
+            TARGET_ENV="preprod"
+          fi
+          echo "target_env=${TARGET_ENV}" >> $GITHUB_OUTPUT
+          echo "Selected Environment: ${TARGET_ENV}"
+
+  terraform:
+    name: "Terraform (${{ needs.setup-env.outputs.target_env }})"
+    needs: setup-env
+    runs-on: ubuntu-latest
+    environment: ${{ needs.setup-env.outputs.target_env }}
+
+    defaults:
+      run:
+        working-directory: ./infra
+
+    env:
+      ARM_CLIENT_ID: ${{ vars.AZURE_CLIENT_ID }}
+      ARM_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+      ARM_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Log in to Azure with Client Secret
+        uses: azure/login@v2
+        with:
+          creds: '{"clientId":"${{ vars.AZURE_CLIENT_ID }}","clientSecret":"${{ secrets.AZURE_CLIENT_SECRET }}","subscriptionId":"${{ vars.AZURE_SUBSCRIPTION_ID }}","tenantId":"${{ vars.AZURE_TENANT_ID }}"}'
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.7.0"
+
+      - name: Terraform Format Check
+        run: terraform fmt -check
+
+      - name: Terraform Init
+        run: |
+          terraform init \
+            -backend-config="resource_group_name=${{ vars.TF_STATE_RESOURCE_GROUP }}" \
+            -backend-config="storage_account_name=${{ vars.TF_STATE_STORAGE_ACCOUNT }}" \
+            -backend-config="container_name=${{ vars.TF_STATE_CONTAINER }}" \
+            -backend-config="key=${{ vars.TF_STATE_KEY }}"
+
+      - name: Terraform Validate
+        run: terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          terraform plan -no-color \
+            -var-file="${{ needs.setup-env.outputs.target_env }}.tfvars" \
+            -out=tfplan
+
+      - name: Comment Plan on Pull Request
+        uses: actions/github-script@v7
+        if: github.event_name == 'pull_request'
+        with:
+          script: |
+            const output = `#### Target Environment: \`${{ needs.setup-env.outputs.target_env }}\`
+            #### Terraform Validation 🤖\`${{ steps.validate.outcome }}\`
+            #### Terraform Plan 📖\`${{ steps.plan.outcome }}\`
+
+            *Pushed by: @${{ github.actor }} in PR #${{ github.event.number }}*`;
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: output
+            })
+
+      - name: Terraform Apply
+        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+        run: terraform apply -auto-approve tfplan
