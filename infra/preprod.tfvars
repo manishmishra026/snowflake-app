@@ -2,7 +2,7 @@
 # Pre-Production Environment Configuration (preprod.tfvars)
 # ==============================================================================
 
-location     = "eastus"
+location     = "canadacentral"
 environment  = "preprod"
 project_name = "snowflake"
 

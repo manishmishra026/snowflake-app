@@ -1,3 +1,6 @@
+# Data source for current subscription (required for Service Health Activity Log Alert scope)
+data "azurerm_subscription" "current" {}
+
 # ==============================================================================
 # Log Analytics Workspace
 # ==============================================================================
@@ -59,7 +62,7 @@ resource "azurerm_monitor_data_collection_rule" "main" {
       for_each = var.custom_log_columns
       content {
         name = column.value.name
-        type = column.value.type
+        type = column.value.type == "dynamic" ? "string" : column.value.type
       }
     }
   }
@@ -357,7 +360,7 @@ resource "azurerm_monitor_activity_log_alert" "service_incident" {
   name                = "alert-service-health-incident"
   resource_group_name = azurerm_resource_group.main.name
   location            = "global"
-  scopes              = [azurerm_resource_group.main.id]
+  scopes              = [data.azurerm_subscription.current.id]
   description         = "Service Health Alert - Active Service Incident"
 
   criteria {
@@ -380,7 +383,7 @@ resource "azurerm_monitor_activity_log_alert" "planned_maintenance" {
   name                = "alert-service-health-planned-maintenance"
   resource_group_name = azurerm_resource_group.main.name
   location            = "global"
-  scopes              = [azurerm_resource_group.main.id]
+  scopes              = [data.azurerm_subscription.current.id]
   description         = "Service Health Alert - Planned Maintenance Notification"
 
   criteria {
