@@ -107,7 +107,18 @@ if os.path.exists(static_dir):
     @app.get("/{file_name}")
     def get_static_file(file_name: str):
         """Serve top-level static assets (e.g. main.js, styles.css) or fallback to SPA index.html."""
-        file_path = os.path.join(static_dir, file_name)
+        # Prevent directory traversal vulnerability (CWE-22)
+        safe_file_name = os.path.basename(file_name)
+        if file_name != safe_file_name or ".." in file_name:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file name")
+
+        real_static_dir = os.path.realpath(static_dir)
+        file_path = os.path.realpath(os.path.join(real_static_dir, safe_file_name))
+        
+        # Verify the resolved path is strictly within the static files directory
+        if not file_path.startswith(real_static_dir):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
         if os.path.isfile(file_path):
             return FileResponse(file_path)
             
@@ -115,7 +126,7 @@ if os.path.exists(static_dir):
         index_path = os.path.join(static_dir, "index.html")
         if os.path.isfile(index_path):
             return FileResponse(index_path)
-        raise HTTPException(status_code=404, detail="File not found")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
 
     @app.get("/{catchall:path}")
     def serve_spa(catchall: str):

@@ -1,10 +1,12 @@
 import logging
+import math
 import io
-import os
 import pandas as pd
 from typing import Any, Dict, List, Tuple
 from azure.storage.blob import BlobServiceClient
 from shared_code import config
+
+KEY_EMPTY_CELL = "EMPTY CELL"
 
 # ==============================================================================
 # BLOB STORAGE HELPERS
@@ -49,7 +51,7 @@ def is_empty(v) -> bool:
     """Normalize emptiness checks across None/NaN/blank string representations."""
     if v is None:
         return True
-    if isinstance(v, float) and v != v:
+    if isinstance(v, float) and math.isnan(v):
         return True
     if isinstance(v, str) and v.strip() == "":
         return True
@@ -60,7 +62,7 @@ def is_empty(v) -> bool:
 
 def _clean_lcdv(v) -> str or None:
     """Normalize LCDV to a clean alphanumeric string (remove scientific notation)."""
-    if v is None or (isinstance(v, float) and v != v):
+    if v is None or (isinstance(v, float) and math.isnan(v)):
         return None
     s = str(v).strip()
     if not s:
@@ -124,8 +126,44 @@ def insert_column_if_missing(df: pd.DataFrame, col_name: str, expected_cols: Lis
 
     return df
 
+def _find_matched_schema_key(file_name: str) -> str or None:
+    """Helper to find matching schema key prefix in config."""
+    for key in config.FINAL_COLUMNS.keys():
+        if key.upper() in file_name.upper():
+            return key
+    return None
+
+def _apply_default_enrichment(df: pd.DataFrame, start_date: str, end_date: str, user_id: str) -> None:
+    """Helper to apply default enrichment when schema is missing."""
+    if "Validity_Start_date" not in df.columns:
+        df["Validity_Start_date"] = start_date
+    if "Validity_end_date" not in df.columns:
+        df["Validity_end_date"] = end_date
+    if "User_Identification" not in df.columns:
+        df["User_Identification"] = user_id
+
+def _apply_schema_enrichment(df: pd.DataFrame, matched_key: str, start_date: str, end_date: str, user_id: str) -> pd.DataFrame:
+    """Helper to enrich dataframe based on matching schema mapping."""
+    expected_cols = config.FINAL_COLUMNS[matched_key]
+    add_validity_dates = "INVOICE" not in matched_key.upper()
+    start_col, end_col = get_validity_date_columns(expected_cols)
+
+    if add_validity_dates and start_col:
+        df = insert_column_if_missing(df, start_col, expected_cols, start_date)
+        df[start_col] = start_date
+
+    if add_validity_dates and end_col:
+        df = insert_column_if_missing(df, end_col, expected_cols, end_date)
+        df[end_col] = end_date
+
+    if "User_Identification" in expected_cols:
+        df = insert_column_if_missing(df, "User_Identification", expected_cols, user_id)
+        df["User_Identification"] = user_id
+
+    return df
+
 def add_user_id_and_dates(file_name: str, file_content: bytes, user_id: str, start_date: str, end_date: str) -> bytes:
-    """Implements Script 1 logic to add/fill validity dates and user_id."""
+    """Enrich the input data with validity dates and user identification."""
     content_str = file_content.decode("utf-8-sig", errors="ignore")
     sep = detect_sep_from_content(content_str)
     
@@ -138,38 +176,13 @@ def add_user_id_and_dates(file_name: str, file_content: bytes, user_id: str, sta
     )
     df.columns = df.columns.str.strip()
 
-    # Find matching schema prefix in config
-    matched_key = None
-    for key in config.FINAL_COLUMNS.keys():
-        if key.upper() in file_name.upper():
-            matched_key = key
-            break
+    matched_key = _find_matched_schema_key(file_name)
 
     if not matched_key:
         logging.warning(f"File '{file_name}' not found in FINAL_COLUMNS schema mapping. Skipping schema enrichment.")
-        # Default behavior: append at the end
-        if "Validity_Start_date" not in df.columns:
-            df["Validity_Start_date"] = start_date
-        if "Validity_end_date" not in df.columns:
-            df["Validity_end_date"] = end_date
-        if "User_Identification" not in df.columns:
-            df["User_Identification"] = user_id
+        _apply_default_enrichment(df, start_date, end_date, user_id)
     else:
-        expected_cols = config.FINAL_COLUMNS[matched_key]
-        add_validity_dates = "INVOICE" not in matched_key.upper()
-        start_col, end_col = get_validity_date_columns(expected_cols)
-
-        if add_validity_dates and start_col:
-            df = insert_column_if_missing(df, start_col, expected_cols, start_date)
-            df[start_col] = start_date
-
-        if add_validity_dates and end_col:
-            df = insert_column_if_missing(df, end_col, expected_cols, end_date)
-            df[end_col] = end_date
-
-        if "User_Identification" in expected_cols:
-            df = insert_column_if_missing(df, "User_Identification", expected_cols, user_id)
-            df["User_Identification"] = user_id
+        df = _apply_schema_enrichment(df, matched_key, start_date, end_date, user_id)
 
     # Always output with semicolon separator as in original script
     output_stream = io.StringIO()
@@ -235,7 +248,6 @@ def lcdv_matches_pattern(candidate: str, pattern: str) -> bool:
     return True
 
 def _get_candidate_pairs(country: str, brand: str, energy: str or None, lookups: dict) -> set:
-    group = config.PCD_BRANDS if brand in config.PCD_BRANDS else (config.OV_BRANDS if brand in config.OV_BRANDS else ("FCA" if brand in config.FCA_BRANDS else None))
     energy = None if is_empty(energy) else str(energy)
 
     if brand in config.PCD_BRANDS or brand in config.OV_BRANDS:
@@ -252,23 +264,26 @@ def _get_candidate_pairs(country: str, brand: str, energy: str or None, lookups:
 
     return set()
 
-def resolve_lcdv_energy(lcdv, energy, country, brand, lookups: dict) -> List[Tuple]:
-    brand = str(brand or "").strip()
-    country = str(country or "").strip()
-    lcdv_in = None if is_empty(lcdv) else _clean_lcdv(lcdv)
-    energy_in = None if is_empty(energy) else str(energy).strip()
+def _resolve_empty_lcdv(country: str, brand: str, energy_in: str or None, lookups: dict) -> List[Tuple]:
+    """Helper to resolve LCDV when input is empty."""
+    pairs = _get_candidate_pairs(country, brand, energy_in, lookups)
+    if pairs:
+        return list(pairs)
+    fallback_energy = energy_in if energy_in else None
+    return [(None, fallback_energy)]
 
-    # Case 1: LCDV is empty
-    if not lcdv_in:
-        pairs = _get_candidate_pairs(country, brand, energy_in, lookups)
-        return list(pairs) or [(None, energy_in if energy_in else None)]
-
-    # Case 2: LCDV is present (exact or pattern)
+def _resolve_present_lcdv(lcdv_in: str, country: str, brand: str, energy_in: str or None, lookups: dict) -> List[Tuple]:
+    """Helper to resolve LCDV when input is present."""
     candidate_pairs = _get_candidate_pairs(country, brand, energy_in, lookups)
     matched_pairs = []
     for lv, ev in candidate_pairs:
-        if lcdv_matches_pattern(lv, lcdv_in):
-            matched_pairs.append((lv, ev if ev is not None else get_energy_from_lcdv(lv)))
+        if not lcdv_matches_pattern(lv, lcdv_in):
+            continue
+        
+        final_ev = ev
+        if final_ev is None:
+            final_ev = get_energy_from_lcdv(lv)
+        matched_pairs.append((lv, final_ev))
 
     matched_pairs = list(dict.fromkeys(matched_pairs))
     if matched_pairs:
@@ -276,7 +291,20 @@ def resolve_lcdv_energy(lcdv, energy, country, brand, lookups: dict) -> List[Tup
 
     # Fallback
     derived_energy = get_energy_from_lcdv(lcdv_in)
-    return [(lcdv_in, derived_energy or energy_in)]
+    final_fallback_energy = derived_energy if derived_energy else energy_in
+    return [(lcdv_in, final_fallback_energy)]
+
+def resolve_lcdv_energy(lcdv, energy, country, brand, lookups: dict) -> List[Tuple]:
+    """Resolves correct LCDV and Energy type pairs from available Snowflake context lookup mappings."""
+    brand = str(brand or "").strip()
+    country = str(country or "").strip()
+    lcdv_in = None if is_empty(lcdv) else _clean_lcdv(lcdv)
+    energy_in = None if is_empty(energy) else str(energy).strip()
+
+    if not lcdv_in:
+        return _resolve_empty_lcdv(country, brand, energy_in, lookups)
+
+    return _resolve_present_lcdv(lcdv_in, country, brand, energy_in, lookups)
 
 def _compute_gaps(intervals: List[Tuple[float, float]], max_default: float) -> List[Tuple[float, float]]:
     if not intervals:
@@ -307,7 +335,120 @@ def _compute_gaps(intervals: List[Tuple[float, float]], max_default: float) -> L
 def _fmt_range(v: float) -> Any:
     return int(v) if v == int(v) else v
 
+def _fill_range_gap_max_empty(
+    row: dict,
+    color: str or None,
+    key_intervals: dict,
+    max_col: str,
+    max_default: float,
+    key_cols: List[str],
+    v_min: Any
+) -> Tuple[List[dict], List[str or None], int, int, int]:
+    """Helper to process the case when min_col is not empty, but max_col is empty."""
+    key = tuple(row.get(c) for c in key_cols)
+    intervals = key_intervals.get(key, [])
+    if not intervals:
+        nr = row.copy()
+        nr[max_col] = _fmt_range(max_default)
+        return [nr], [color], 1, 0, 0
+    else:
+        gaps = _compute_gaps(intervals, max_default)
+        try:
+            v_min_f = float(v_min)
+            matched = next((g for g in gaps if g[0] <= v_min_f <= g[1]), None)
+        except (ValueError, TypeError):
+            matched = None
+
+        nr = row.copy()
+        nr[max_col] = _fmt_range(matched[1] if matched else max_default)
+        return [nr], [color], 0, 1, 1
+
+def _fill_range_gap_both_empty(
+    row: dict,
+    color: str or None,
+    key_intervals: dict,
+    min_col: str,
+    max_col: str,
+    max_default: float,
+    key_cols: List[str]
+) -> Tuple[List[dict], List[str or None], int, int, int]:
+    """Helper to process the case when both min_col and max_col are empty."""
+    gap_color = "red" if color == "red" else "green"
+    key = tuple(row.get(c) for c in key_cols)
+    intervals = key_intervals.get(key, [])
+
+    if not intervals:
+        nr = row.copy()
+        nr[min_col] = 0
+        nr[max_col] = _fmt_range(max_default)
+        return [nr], [gap_color], 1, 0, 0
+    else:
+        gaps = _compute_gaps(intervals, max_default)
+        if not gaps:
+            return [row], [color], 0, 0, 0
+        else:
+            res_rows = []
+            res_colors = []
+            for g_min, g_max in gaps:
+                 nr = row.copy()
+                 nr[min_col] = _fmt_range(g_min)
+                 nr[max_col] = _fmt_range(g_max)
+                 res_rows.append(nr)
+                 res_colors.append(gap_color)
+            return res_rows, res_colors, 0, 1, len(gaps)
+
+def _fill_range_gap_for_row(
+    row: dict,
+    color: str or None,
+    key_intervals: dict,
+    min_col: str,
+    max_col: str,
+    max_default: float,
+    key_cols: List[str]
+) -> Tuple[List[dict], List[str or None], int, int, int]:
+    """Helper to process a single row's range gap completion."""
+    v_min = row.get(min_col)
+    v_max = row.get(max_col)
+
+    min_is_empty = is_empty(v_min)
+    max_is_empty = is_empty(v_max)
+
+    # Case 1: min is empty, max is not empty
+    if min_is_empty and not max_is_empty:
+        nr = row.copy()
+        nr[min_col] = 0
+        return [nr], [color], 1, 0, 0
+
+    # Case 2: min is not empty, max is empty
+    if not min_is_empty and max_is_empty:
+        return _fill_range_gap_max_empty(row, color, key_intervals, max_col, max_default, key_cols, v_min)
+
+    # Case 3: Both are not empty
+    if not min_is_empty and not max_is_empty:
+        return [row], [color], 0, 0, 0
+
+    # Case 4: Both are empty
+    return _fill_range_gap_both_empty(row, color, key_intervals, min_col, max_col, max_default, key_cols)
+
+def _build_key_intervals(rows: List[dict], min_col: str, max_col: str, key_cols: List[str]) -> dict:
+    """Helper to compile and group intervals mapped by key columns."""
+    from collections import defaultdict
+    key_intervals = defaultdict(list)
+    for row in rows:
+        v_min = row.get(min_col)
+        v_max = row.get(max_col)
+        if is_empty(v_min) or is_empty(v_max):
+            continue
+        try:
+            s, e = float(v_min), float(v_max)
+            if s <= e:
+                key_intervals[tuple(row.get(c) for c in key_cols)].append((s, e))
+        except (ValueError, TypeError):
+            pass
+    return key_intervals
+
 def fill_range_gaps(rows: List[dict], colors: List[str or None], key_cols: List[str], min_col: str, max_col: str, max_default: float) -> Tuple[List[dict], List[str or None], dict]:
+    """Fills range gaps in km/duration columns based on available intervals."""
     if not rows:
         return rows, colors, {"simple": 0, "gap_sources": 0, "gap_rows": 0}
 
@@ -315,92 +456,21 @@ def fill_range_gaps(rows: List[dict], colors: List[str or None], key_cols: List[
     if min_col not in sample and max_col not in sample:
         return rows, colors, {"simple": 0, "gap_sources": 0, "gap_rows": 0}
 
-    from collections import defaultdict
-    key_intervals = defaultdict(list)
-
-    for row in rows:
-        v_min = row.get(min_col)
-        v_max = row.get(max_col)
-        if not is_empty(v_min) and not is_empty(v_max):
-            try:
-                s, e = float(v_min), float(v_max)
-                if s <= e:
-                    key_intervals[tuple(row.get(c) for c in key_cols)].append((s, e))
-            except (ValueError, TypeError):
-                pass
+    key_intervals = _build_key_intervals(rows, min_col, max_col, key_cols)
 
     new_rows = []
     new_colors = []
     s_simple = s_gap_sources = s_gap_rows = 0
 
     for row, color in zip(rows, colors):
-        v_min = row.get(min_col)
-        v_max = row.get(max_col)
-
-        if is_empty(v_min) and not is_empty(v_max):
-            nr = row.copy()
-            nr[min_col] = 0
-            new_rows.append(nr)
-            new_colors.append(color)
-            s_simple += 1
-            continue
-
-        if not is_empty(v_min) and is_empty(v_max):
-            key = tuple(row.get(c) for c in key_cols)
-            intervals = key_intervals.get(key, [])
-            if not intervals:
-                nr = row.copy()
-                nr[max_col] = _fmt_range(max_default)
-                new_rows.append(nr)
-                new_colors.append(color)
-                s_simple += 1
-            else:
-                gaps = _compute_gaps(intervals, max_default)
-                try:
-                    v_min_f = float(v_min)
-                    matched = next((g for g in gaps if g[0] <= v_min_f <= g[1]), None)
-                except (ValueError, TypeError):
-                    matched = None
-
-                nr = row.copy()
-                nr[max_col] = _fmt_range(matched[1] if matched else max_default)
-                new_rows.append(nr)
-                new_colors.append(color)
-                s_gap_sources += 1
-                s_gap_rows += 1
-                continue
-
-        if not (is_empty(v_min) and is_empty(v_max)):
-            new_rows.append(row)
-            new_colors.append(color)
-            continue
-
-        # Both empty
-        gap_color = "red" if color == "red" else "green"
-        key = tuple(row.get(c) for c in key_cols)
-        intervals = key_intervals.get(key, [])
-
-        if not intervals:
-            nr = row.copy()
-            nr[min_col] = 0
-            nr[max_col] = _fmt_range(max_default)
-            new_rows.append(nr)
-            new_colors.append(gap_color)
-            s_simple += 1
-        else:
-            gaps = _compute_gaps(intervals, max_default)
-            if not gaps:
-                new_rows.append(row)
-                new_colors.append(color)
-            else:
-                s_gap_sources += 1
-                for g_min, g_max in gaps:
-                     nr = row.copy()
-                     nr[min_col] = _fmt_range(g_min)
-                     nr[max_col] = _fmt_range(g_max)
-                     new_rows.append(nr)
-                     new_colors.append(gap_color)
-                     s_gap_rows += 1
+        nr_list, nc_list, d_simple, d_gap_sources, d_gap_rows = _fill_range_gap_for_row(
+            row, color, key_intervals, min_col, max_col, max_default, key_cols
+        )
+        new_rows.extend(nr_list)
+        new_colors.extend(nc_list)
+        s_simple += d_simple
+        s_gap_sources += d_gap_sources
+        s_gap_rows += d_gap_rows
 
     return new_rows, new_colors, {
         "simple": s_simple,
@@ -408,74 +478,101 @@ def fill_range_gaps(rows: List[dict], colors: List[str or None], key_cols: List[
         "gap_rows": s_gap_rows,
     }
 
-def fill_empty_cells(file_name: str, file_content: bytes, snowflake_data: Dict[str, List[Dict[str, Any]]]) -> Tuple[bytes, bytes or None, bytes or None]:
-    """Implements Script 2 logic using Snowflake datasets instead of local CSV/Excel files."""
-    from collections import defaultdict
-    
-    # --------------------------------------------------------------------------
-    # 1. BUILD RESOLUTION LOOKUPS FROM SNOWFLAKE DATA
-    # --------------------------------------------------------------------------
-    # A. BB_LEGAL_ENTITY -> compat_le
+def _build_compat_le(rows: List[dict]) -> Dict[str, dict]:
+    """Helper to build legal entity compatibility mapping."""
     compat_le = {}
-    for row in snowflake_data["BB_LEGAL_ENTITY"]:
+    for row in rows:
         le_code = row.get("legal_entity_code")
-        country = row.get("country")
-        brand_str = str(row.get("brand") or "")
-        brands_raw = [b.strip() for b in brand_str.split() if b.strip()]
-        brands = [b for b in brands_raw if b not in config.BRANDS_IGNORED]
-        if le_code and not is_empty(le_code):
-            compat_le[str(le_code).strip()] = {
-                "country": str(country).strip() if not is_empty(country) else None,
-                "brands": brands,
-            }
+        if not le_code or is_empty(le_code):
+            continue
 
-    # B. REFERENCIAL_DATA_UCDM -> ref_cbm, ref_cb
-    ref_cbm = defaultdict(set)
-    ref_cb = defaultdict(set)
-    for row in snowflake_data["REFERENCIAL_DATA_UCDM"]:
+        country = row.get("country")
+        country_clean = str(country).strip() if not is_empty(country) else None
+
+        brand_str = str(row.get("brand") or "")
+        brands_raw = [b.strip() for b in brand_str.split()]
+        brands = [b for b in brands_raw if b and b not in config.BRANDS_IGNORED]
+
+        compat_le[str(le_code).strip()] = {
+            "country": country_clean,
+            "brands": brands,
+        }
+    return compat_le
+
+def _build_ref_lookups(rows: List[dict], ref_cbm: dict, ref_cb: dict) -> None:
+    """Helper to populate UCDM reference table mappings."""
+    for row in rows:
         c_id = row.get("country_id")
         b_id = row.get("brand_id")
         l_16 = _clean_lcdv(row.get("lcdv_16"))
         m_id = row.get("motor_id")
-        if not (is_empty(c_id) or is_empty(b_id) or is_empty(l_16) or is_empty(m_id)):
-            c_id = str(c_id).strip()
-            b_id = str(b_id).strip()
-            l_16 = str(l_16).strip()
-            m_id = str(m_id).strip()
-            ref_cbm[(c_id, b_id, m_id)].add(l_16)
-            ref_cb[(c_id, b_id)].add((l_16, m_id))
 
-    # C. CFA_TRANSCODED -> cfa_cbe, cfa_cb
-    cfa_cbe = defaultdict(set)
-    cfa_cb = defaultdict(set)
-    for row in snowflake_data["CFA_TRANSCODED"]:
+        if is_empty(c_id) or is_empty(b_id) or is_empty(l_16) or is_empty(m_id):
+            continue
+
+        c_id = str(c_id).strip()
+        b_id = str(b_id).strip()
+        l_16 = str(l_16).strip()
+        m_id = str(m_id).strip()
+        ref_cbm[(c_id, b_id, m_id)].add(l_16)
+        ref_cb[(c_id, b_id)].add((l_16, m_id))
+
+def _build_cfa_lookups(rows: List[dict], cfa_cbe: dict, cfa_cb: dict) -> None:
+    """Helper to populate CFA transcode reference table mappings."""
+    for row in rows:
         c = row.get("country")
         b = row.get("brand_name")
         lv = _clean_lcdv(row.get("lcdv"))
-        if not (is_empty(c) or is_empty(b) or is_empty(lv)):
-            c = str(c).strip()
-            b = str(b).strip()
-            lv = str(lv).strip()
-            if len(lv) >= 9:
-                energy = lv[7:9]
-                cfa_cbe[(c, b, energy)].add(lv)
-                cfa_cb[(c, b)].add((lv, energy))
 
-    # D. ENT_UC_STOCK_IMAGE -> ent_cbe, ent_cb
-    ent_cbe = defaultdict(set)
-    ent_cb = defaultdict(set)
-    for row in snowflake_data["ENT_UC_STOCK_IMAGE"]:
+        if is_empty(c) or is_empty(b) or is_empty(lv):
+            continue
+
+        c = str(c).strip()
+        b = str(b).strip()
+        lv = str(lv).strip()
+        if len(lv) < 9:
+            continue
+
+        energy = lv[7:9]
+        cfa_cbe[(c, b, energy)].add(lv)
+        cfa_cb[(c, b)].add((lv, energy))
+
+def _build_ent_lookups(rows: List[dict], ent_cbe: dict, ent_cb: dict) -> None:
+    """Helper to populate ENT stock image reference table mappings."""
+    for row in rows:
         c = row.get("cd_country_code")
         b = row.get("cd_brand_code")
         lv = _clean_lcdv(row.get("cd_lcdv_code"))
-        if not (is_empty(c) or is_empty(b) or is_empty(lv)):
-            c = str(c).strip()
-            b = str(b).strip()
-            lv = str(lv).strip()
-            if len(lv) >= 9:
-                energy = lv[7:9]
-                ent_cbe[(c, b, energy)].add(lv)
-                ent_cb[(c, b)].add((lv, energy))
+
+        if is_empty(c) or is_empty(b) or is_empty(lv):
+            continue
+
+        c = str(c).strip()
+        b = str(b).strip()
+        lv = str(lv).strip()
+        if len(lv) < 9:
+            continue
+
+        energy = lv[7:9]
+        ent_cbe[(c, b, energy)].add(lv)
+        ent_cb[(c, b)].add((lv, energy))
+
+def _build_lookups(snowflake_data: Dict[str, List[Dict[str, Any]]]) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """Builds the resolution lookup tables from Snowflake data."""
+    compat_le = _build_compat_le(snowflake_data.get("BB_LEGAL_ENTITY", []))
+
+    from collections import defaultdict
+    ref_cbm = defaultdict(set)
+    ref_cb = defaultdict(set)
+    _build_ref_lookups(snowflake_data.get("REFERENCIAL_DATA_UCDM", []), ref_cbm, ref_cb)
+
+    cfa_cbe = defaultdict(set)
+    cfa_cb = defaultdict(set)
+    _build_cfa_lookups(snowflake_data.get("CFA_TRANSCODED", []), cfa_cbe, cfa_cb)
+
+    ent_cbe = defaultdict(set)
+    ent_cb = defaultdict(set)
+    _build_ent_lookups(snowflake_data.get("ENT_UC_STOCK_IMAGE", []), ent_cbe, ent_cb)
 
     lookups = {
         "ref_cbm": ref_cbm,
@@ -485,6 +582,297 @@ def fill_empty_cells(file_name: str, file_content: bytes, snowflake_data: Dict[s
         "ent_cbe": ent_cbe,
         "ent_cb": ent_cb
     }
+    return compat_le, lookups
+
+def _expand_scenario(candidates: List[dict], original_val: Any) -> List[dict]:
+    if is_empty(original_val):
+        for c in candidates:
+            c["Scenario"] = "RE"
+    return candidates
+
+def _expand_nv_uc(candidates: List[dict], original_val: Any) -> List[dict]:
+    if not is_empty(original_val):
+        return candidates
+    expanded = []
+    for c in candidates:
+        for val in ("NV", "UC"):
+            nc = c.copy()
+            nc["nv_uc"] = val
+            expanded.append(nc)
+    return expanded
+
+def _expand_brand(candidates: List[dict], original_val: Any, le_info: dict) -> Tuple[List[dict], List[str]]:
+    if not is_empty(original_val):
+        return candidates, []
+    usable_brands = le_info.get("brands", [])
+    if not usable_brands:
+        return candidates, []
+    expanded = []
+    for c in candidates:
+        for b in usable_brands:
+            nc = c.copy()
+            nc["Brand"] = b
+            expanded.append(nc)
+    return expanded, usable_brands
+
+def _expand_channel(candidates: List[dict], original_val: Any, country: str or None) -> Tuple[List[dict], List[str]]:
+    if not is_empty(original_val):
+        return candidates, []
+    channels = config.compat_channels.get(str(country or ""), [])
+    if not channels:
+        return candidates, []
+    expanded = []
+    for c in candidates:
+        for ch in channels:
+            nc = c.copy()
+            nc["standardized_UC_Origin_Channel"] = ch
+            expanded.append(nc)
+    return expanded, channels
+
+def _get_candidate_pairs_resolved(c: dict, country: str or None, lookups: dict) -> List[Tuple]:
+    brand = c.get("Brand")
+    if is_empty(brand):
+        return []
+
+    lcdv_in = c.get("LCDV_group")
+    if is_empty(lcdv_in):
+        lcdv_in = None
+
+    energy_in = c.get("Energy_type")
+    if is_empty(energy_in):
+        energy_in = None
+
+    return resolve_lcdv_energy(lcdv_in, energy_in, str(country or ""), str(brand), lookups)
+
+def _expand_candidate_with_pairs(c: dict, pairs: List[Tuple], expanded: List[dict]) -> None:
+    for (lv, ev) in pairs:
+        nc = c.copy()
+        nc["LCDV_group"] = lv
+        if is_empty(nc.get("Energy_type")):
+            nc["Energy_type"] = ev
+        expanded.append(nc)
+
+def _expand_lcdv_energy(
+    candidates: List[dict],
+    original_lcdv: Any,
+    original_energy: Any,
+    country: str or None,
+    lookups: dict
+) -> List[dict]:
+    lcdv_empty = is_empty(original_lcdv)
+    energy_empty = is_empty(original_energy)
+
+    if not (lcdv_empty or not lcdv_empty or energy_empty):
+        return candidates
+
+    expanded = []
+    for c in candidates:
+        pairs = _get_candidate_pairs_resolved(c, country, lookups)
+        if not pairs:
+            expanded.append(c)
+        else:
+            _expand_candidate_with_pairs(c, pairs, expanded)
+
+    return expanded
+
+def _expand_row(row_dict: dict, le_info: dict, country: str or None, lookups: dict) -> Tuple[List[dict], List[str], List[str]]:
+    """Expands a single row's empty cells combinatorially."""
+    candidates = [row_dict.copy()]
+
+    candidates = _expand_scenario(candidates, row_dict.get("Scenario"))
+    candidates = _expand_nv_uc(candidates, row_dict.get("nv_uc"))
+    candidates, usable_brands = _expand_brand(candidates, row_dict.get("Brand"), le_info)
+    candidates, channels = _expand_channel(candidates, row_dict.get("standardized_UC_Origin_Channel"), country)
+    candidates = _expand_lcdv_energy(candidates, row_dict.get("LCDV_group"), row_dict.get("Energy_type"), country, lookups)
+
+    return candidates, usable_brands, channels
+
+def _get_brands_check(row_dict: dict, usable_brands: List[str]) -> List[str]:
+    brand_val = row_dict.get("Brand")
+    if not is_empty(brand_val):
+        return [brand_val]
+    return usable_brands
+
+def _get_brand_recap_counts(b: str, country: str or None, e_val: str or None, lookups: dict) -> Tuple[int, int, int]:
+    grp = get_brand_group(b)
+    if grp in ("PCD", "OV"):
+        if e_val:
+            tot = len(lookups["ref_cbm"].get((country, b, e_val), set()))
+        else:
+            tot = len(lookups["ref_cb"].get((country, b), set()))
+        return tot, 0, 0
+        
+    if grp == "FCA":
+        if e_val:
+            tot_cfa = len(lookups["cfa_cbe"].get((country, b, e_val), set()))
+            tot_ent = len(lookups["ent_cbe"].get((country, b, e_val), set()))
+        else:
+            tot_cfa = len({lv for lv, _ in lookups["cfa_cb"].get((country, b), set())})
+            tot_ent = len({lv for lv, _ in lookups["ent_cb"].get((country, b), set())})
+        return 0, tot_cfa, tot_ent
+        
+    return 0, 0, 0
+
+def _add_recap_lcdv_energy_records(
+    row_dict: dict,
+    header: str,
+    usable_brands: List[str],
+    country: str or None,
+    lookups: dict,
+    recap_long: List[dict]
+) -> None:
+    """Generates and appends recap entries for LCDV / Energy fields."""
+    brands_check = _get_brands_check(row_dict, usable_brands)
+    tot_ref = tot_cfa = tot_ent = 0
+    
+    e_val = row_dict.get("Energy_type")
+    if is_empty(e_val):
+        e_val = None
+
+    for b in brands_check:
+        dr, dc, de = _get_brand_recap_counts(b, country, e_val, lookups)
+        tot_ref += dr
+        tot_cfa += dc
+        tot_ent += de
+
+    if tot_ref:
+        recap_long.append({KEY_EMPTY_CELL: "Referentiel V2", "cell": header, "count": tot_ref})
+    if tot_cfa:
+        recap_long.append({KEY_EMPTY_CELL: "CFA_TRANSCODED", "cell": header, "count": tot_cfa})
+    if tot_ent:
+        recap_long.append({KEY_EMPTY_CELL: "ENT_UC_STOCK", "cell": header, "count": tot_ent})
+    if not (tot_ref or tot_cfa or tot_ent):
+        recap_long.append({KEY_EMPTY_CELL: "aucune source", "cell": header, "count": 0})
+
+def _add_recap_records(
+    row_dict: dict,
+    src_idx: int,
+    df_columns: List[str],
+    usable_brands: List[str],
+    channels: List[str],
+    country: str or None,
+    lookups: dict,
+    recap_long: List[dict]
+) -> None:
+    """Generates and appends recap entries for empty cells in a row."""
+    seven_cols = list(df_columns[:7])
+    for col_idx, col in enumerate(seven_cols):
+        if not is_empty(row_dict.get(col)):
+            continue
+
+        cell_ref = f"{get_column_letter(col_idx + 1)}{src_idx + 2}"
+        header = f"{cell_ref} ({col})"
+
+        if col == "Brand":
+            recap_long.append({
+                KEY_EMPTY_CELL: "Compatibility S1",
+                "cell": header,
+                "count": len(usable_brands),
+            })
+        elif col == "standardized_UC_Origin_Channel":
+            recap_long.append({
+                KEY_EMPTY_CELL: "Compatibility S2",
+                "cell": header,
+                "count": len(channels),
+            })
+        elif col in ("LCDV_group", "Energy_type"):
+            _add_recap_lcdv_energy_records(row_dict, header, usable_brands, country, lookups, recap_long)
+
+def _check_source_has_empty(row_dict: dict, columns: List[str]) -> bool:
+    """Helper to check if any of the columns in a row are empty."""
+    for col in columns:
+        if is_empty(row_dict.get(col)):
+            return True
+    return False
+
+def _classify_candidates(
+    candidates: List[dict],
+    seven_cols: List[str],
+    source_has_empty: bool,
+    output_rows: List[dict],
+    output_colors: List[str or None],
+    unresolved: List[dict]
+) -> None:
+    """Helper to classify and sort candidate rows into processed or unresolved lists."""
+    for c in candidates:
+        has_vides = False
+        for col in seven_cols:
+            if is_empty(c.get(col)):
+                has_vides = True
+                break
+
+        if has_vides:
+            unresolved.append(c)
+        else:
+            output_rows.append(c)
+            output_colors.append("green" if source_has_empty else None)
+
+def _process_input_row(
+    row_dict: dict,
+    src_idx: int,
+    df_columns: List[str],
+    compat_le: dict,
+    lookups: dict,
+    output_rows: List[dict],
+    output_colors: List[str or None],
+    recap_long: List[dict],
+    unresolved: List[dict]
+) -> None:
+    """Helper to process a single input row for empty cell filling."""
+    seven_cols = list(df_columns[:7])
+    source_has_empty = _check_source_has_empty(row_dict, seven_cols)
+    source_lcdv_present = not is_empty(row_dict.get("LCDV_group"))
+
+    if not source_has_empty and not source_lcdv_present:
+        output_rows.append(row_dict)
+        output_colors.append(None)
+        return
+
+    le_info = compat_le.get(str(row_dict.get("Legal_Entity")) or "", {})
+    country = le_info.get("country")
+    
+    candidates, usable_brands, channels = _expand_row(row_dict, le_info, country, lookups)
+
+    _classify_candidates(candidates, seven_cols, source_has_empty, output_rows, output_colors, unresolved)
+
+    # Recap statistics aggregation
+    if source_has_empty:
+        _add_recap_records(row_dict, src_idx, df_columns, usable_brands, channels, country, lookups, recap_long)
+
+def _compile_recap_report(recap_long: List[dict]) -> bytes or None:
+    """Helper to compile and format the recap report bytes."""
+    if not recap_long:
+        return None
+    df_rl = pd.DataFrame(recap_long)
+    df_recap = df_rl.pivot_table(
+        index=KEY_EMPTY_CELL,
+        columns="cell",
+        values="count",
+        aggfunc="sum",
+        fill_value=""
+    )
+    df_recap.columns.name = None
+    recap_stream = io.StringIO()
+    df_recap.to_csv(recap_stream, sep=";", encoding="utf-8-sig")
+    return recap_stream.getvalue().encode("utf-8-sig")
+
+def _compile_unresolved_report(unresolved: List[dict], df_columns: List[str]) -> bytes or None:
+    """Helper to compile and format the unresolved report bytes."""
+    if not unresolved:
+        return None
+    df_unres = pd.DataFrame(unresolved, columns=df_columns)
+    df_unres = df_unres.drop_duplicates()
+    unres_stream = io.StringIO()
+    df_unres.to_csv(unres_stream, sep=";", index=False, encoding="utf-8-sig")
+    return unres_stream.getvalue().encode("utf-8-sig")
+
+def fill_empty_cells(file_content: bytes, snowflake_data: Dict[str, List[Dict[str, Any]]]) -> Tuple[bytes, bytes or None, bytes or None]:
+    """Process empty cell combinatorial expansion using Snowflake reference tables."""
+    
+    # --------------------------------------------------------------------------
+    # 1. BUILD RESOLUTION LOOKUPS FROM SNOWFLAKE DATA
+    # --------------------------------------------------------------------------
+    compat_le, lookups = _build_lookups(snowflake_data)
 
     # --------------------------------------------------------------------------
     # 2. PROCESS INPUT FILE
@@ -507,173 +895,37 @@ def fill_empty_cells(file_name: str, file_content: bytes, snowflake_data: Dict[s
     recap_long = []
     unresolved = []
 
-    COL_LEGAL_ENTITY = "Legal_Entity"
-    COL_BRAND = "Brand"
-    COL_CHANNEL = "standardized_UC_Origin_Channel"
-    COL_LCDV_GROUP = "LCDV_group"
-    COL_NV_UC = "nv_uc"
-    COL_SCENARIO = "Scenario"
-    COL_ENERGY = "Energy_type"
-    COL_KM_MIN = "Km_minimum"
-    COL_KM_MAX = "Km_maximum"
-    COL_DURATION_MIN = "Minimum_Contract_duration"
-    COL_DURATION_MAX = "Maximum_Contract_duration"
-
     for src_idx, row_dict in enumerate(all_rows):
-        lcdv_raw = row_dict.get(COL_LCDV_GROUP)
-        source_has_empty = any(is_empty(row_dict.get(col)) for col in df_in.columns[:7])
-        source_lcdv_present = not is_empty(lcdv_raw)
-
-        if not source_has_empty and not source_lcdv_present:
-            output_rows.append(row_dict)
-            output_colors.append(None)
-            continue
-
-        le_info = compat_le.get(str(row_dict.get(COL_LEGAL_ENTITY)) or "", {})
-        country = le_info.get("country")
-        candidates = [row_dict.copy()]
-
-        usable_brands = []
-        channels = []
-
-        # 1. Scenario
-        if is_empty(row_dict.get(COL_SCENARIO)):
-            for c in candidates:
-                c[COL_SCENARIO] = "RE"
-
-        # 2. NV / UC
-        if is_empty(row_dict.get(COL_NV_UC)):
-            expanded = []
-            for c in candidates:
-                for val in ("NV", "UC"):
-                    nc = c.copy()
-                    nc[COL_NV_UC] = val
-                    expanded.append(nc)
-            candidates = expanded
-
-        # 3. Brand
-        if is_empty(row_dict.get(COL_BRAND)):
-            usable_brands = le_info.get("brands", [])
-            if usable_brands:
-                expanded = []
-                for c in candidates:
-                    for b in usable_brands:
-                        nc = c.copy()
-                        nc[COL_BRAND] = b
-                        expanded.append(nc)
-                candidates = expanded
-
-        # 4. Channel
-        if is_empty(row_dict.get(COL_CHANNEL)):
-            channels = config.compat_channels.get(str(country or ""), [])
-            if channels:
-                expanded = []
-                for c in candidates:
-                    for ch in channels:
-                        nc = c.copy()
-                        nc[COL_CHANNEL] = ch
-                        expanded.append(nc)
-                candidates = expanded
-
-        # 5 & 6. LCDV + Energy
-        lcdv_val_raw = row_dict.get(COL_LCDV_GROUP)
-        lcdv_empty = is_empty(lcdv_val_raw)
-        lcdv_is_partial = not lcdv_empty
-        energy_empty = is_empty(row_dict.get(COL_ENERGY))
-
-        if lcdv_empty or lcdv_is_partial or energy_empty:
-            expanded = []
-            for c in candidates:
-                brand = c.get(COL_BRAND)
-                if is_empty(brand):
-                    expanded.append(c)
-                    continue
-
-                lcdv_in = None if is_empty(c.get(COL_LCDV_GROUP)) else c.get(COL_LCDV_GROUP)
-                energy_in = None if is_empty(c.get(COL_ENERGY)) else c.get(COL_ENERGY)
-
-                pairs = resolve_lcdv_energy(lcdv_in, energy_in, str(country or ""), str(brand), lookups)
-
-                for (lv, ev) in pairs:
-                    nc = c.copy()
-                    nc[COL_LCDV_GROUP] = lv
-                    if is_empty(nc.get(COL_ENERGY)):
-                        nc[COL_ENERGY] = ev
-                    expanded.append(nc)
-
-            candidates = expanded
-
-        # Row Classification
-        for c in candidates:
-            n_vides = sum(1 for col in df_in.columns[:7] if is_empty(c.get(col)))
-            if n_vides > 0:
-                unresolved.append(c)
-            else:
-                output_rows.append(c)
-                output_colors.append("green" if source_has_empty else None)
-
-        # Recap statistics aggregation
-        if source_has_empty:
-            seven_cols = list(df_in.columns[:7])
-            for col_idx, col in enumerate(seven_cols):
-                if not is_empty(row_dict.get(col)):
-                    continue
-
-                cell_ref = f"{get_column_letter(col_idx + 1)}{src_idx + 2}"
-                header = f"{cell_ref} ({col})"
-
-                if col == COL_BRAND:
-                    recap_long.append({
-                        "EMPTY CELL": "Compatibility S1",
-                        "cell": header,
-                        "count": len(usable_brands),
-                    })
-                elif col == COL_CHANNEL:
-                    recap_long.append({
-                        "EMPTY CELL": "Compatibility S2",
-                        "cell": header,
-                        "count": len(channels),
-                    })
-                elif col in (COL_LCDV_GROUP, COL_ENERGY):
-                    brands_check = [row_dict.get(COL_BRAND)] if not is_empty(row_dict.get(COL_BRAND)) else usable_brands
-                    tot_ref = tot_cfa = tot_ent = 0
-                    e_val = None if is_empty(row_dict.get(COL_ENERGY)) else row_dict.get(COL_ENERGY)
-
-                    for b in brands_check:
-                        grp = get_brand_group(b)
-                        if grp in ("PCD", "OV"):
-                            tot_ref += len(ref_cbm.get((country, b, e_val), set()) if e_val else ref_cb.get((country, b), set()))
-                        elif grp == "FCA":
-                            tot_cfa += len(cfa_cbe.get((country, b, e_val), set()) if e_val else set(lv for lv, _ in cfa_cb.get((country, b), set())))
-                            tot_ent += len(ent_cbe.get((country, b, e_val), set()) if e_val else set(lv for lv, _ in ent_cb.get((country, b), set())))
-
-                    if tot_ref:
-                        recap_long.append({"EMPTY CELL": "Referentiel V2", "cell": header, "count": tot_ref})
-                    if tot_cfa:
-                        recap_long.append({"EMPTY CELL": "CFA_TRANSCODED", "cell": header, "count": tot_cfa})
-                    if tot_ent:
-                        recap_long.append({"EMPTY CELL": "ENT_UC_STOCK", "cell": header, "count": tot_ent})
-                    if not (tot_ref or tot_cfa or tot_ent):
-                        recap_long.append({"EMPTY CELL": "aucune source", "cell": header, "count": 0})
+        _process_input_row(
+            row_dict,
+            src_idx,
+            df_in.columns,
+            compat_le,
+            lookups,
+            output_rows,
+            output_colors,
+            recap_long,
+            unresolved
+        )
 
     # Range gap completion (KM)
     range_key_cols = list(df_in.columns[:7])
-    output_rows, output_colors, km_s = fill_range_gaps(
+    output_rows, output_colors, _ = fill_range_gaps(
         output_rows,
         output_colors,
         range_key_cols,
-        COL_KM_MIN,
-        COL_KM_MAX,
+        "Km_minimum",
+        "Km_maximum",
         9999999.0
     )
 
     # Range gap completion (Contract Duration)
-    output_rows, output_colors, dur_s = fill_range_gaps(
+    output_rows, output_colors, _ = fill_range_gaps(
         output_rows,
         output_colors,
         range_key_cols,
-        COL_DURATION_MIN,
-        COL_DURATION_MAX,
+        "Minimum_Contract_duration",
+        "Maximum_Contract_duration",
         200.0
     )
 
@@ -686,29 +938,8 @@ def fill_empty_cells(file_name: str, file_content: bytes, snowflake_data: Dict[s
     df_out.to_csv(processed_stream, sep=sep, index=False, encoding="utf-8-sig")
     processed_bytes = processed_stream.getvalue().encode("utf-8-sig")
 
-    # Recap report
-    recap_bytes = None
-    if recap_long:
-        df_rl = pd.DataFrame(recap_long)
-        df_recap = df_rl.pivot_table(
-            index="EMPTY CELL",
-            columns="cell",
-            values="count",
-            aggfunc="sum",
-            fill_value=""
-        )
-        df_recap.columns.name = None
-        recap_stream = io.StringIO()
-        df_recap.to_csv(recap_stream, sep=";", encoding="utf-8-sig")
-        recap_bytes = recap_stream.getvalue().encode("utf-8-sig")
-
-    # Unresolved report
-    unresolved_bytes = None
-    if unresolved:
-        df_unres = pd.DataFrame(unresolved, columns=df_in.columns)
-        df_unres = df_unres.drop_duplicates()
-        unres_stream = io.StringIO()
-        df_unres.to_csv(unres_stream, sep=";", index=False, encoding="utf-8-sig")
-        unresolved_bytes = unres_stream.getvalue().encode("utf-8-sig")
+    # Compile Reports
+    recap_bytes = _compile_recap_report(recap_long)
+    unresolved_bytes = _compile_unresolved_report(unresolved, df_in.columns)
 
     return processed_bytes, recap_bytes, unresolved_bytes

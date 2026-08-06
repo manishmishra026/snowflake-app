@@ -47,7 +47,8 @@ class SimpleConnectionPool:
         self._lock = threading.Lock()
         self._created_count = 0
 
-    def get_connection(self) -> Any:
+    def _try_get_existing_connection(self) -> Optional[Any]:
+        """Tries to get a connection from the queue without blocking."""
         try:
             conn = self._pool.get_nowait()
             if conn.is_closed():
@@ -56,34 +57,54 @@ class SimpleConnectionPool:
                 return self.get_connection()
             return PooledConnectionProxy(conn, self)
         except queue.Empty:
-            create_new = False
+            return None
+
+    def _create_new_connection(self) -> Optional[Any]:
+        """Creates a new database connection if pool limit has not been reached."""
+        create_new = False
+        with self._lock:
+            if self._created_count < self._max_size:
+                self._created_count += 1
+                create_new = True
+        
+        if not create_new:
+            return None
+
+        try:
+            logger.info("Creating new physical connection for pool")
+            conn = self._creator_fn()
+            return PooledConnectionProxy(conn, self)
+        except Exception:
             with self._lock:
-                if self._created_count < self._max_size:
-                    self._created_count += 1
-                    create_new = True
-            
-            if create_new:
-                try:
-                    logger.info("Creating new physical connection for pool")
-                    conn = self._creator_fn()
-                    return PooledConnectionProxy(conn, self)
-                except Exception:
-                    with self._lock:
-                        self._created_count -= 1
-                    raise
-            
-            try:
-                conn = self._pool.get(timeout=10.0)
-                if conn.is_closed():
-                    with self._lock:
-                        self._created_count -= 1
-                    return self.get_connection()
-                return PooledConnectionProxy(conn, self)
-            except queue.Empty:
-                raise HTTPException(
-                    status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                    detail="Database connection pool exhausted"
-                )
+                self._created_count -= 1
+            raise
+
+    def _wait_for_connection(self) -> Any:
+        """Blocks waiting for an available connection from the pool."""
+        try:
+            conn = self._pool.get(timeout=10.0)
+            if conn.is_closed():
+                with self._lock:
+                    self._created_count -= 1
+                return self.get_connection()
+            return PooledConnectionProxy(conn, self)
+        except queue.Empty:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database connection pool exhausted"
+            )
+
+    def get_connection(self) -> Any:
+        """Acquires a pooled connection, blocking if the pool limit is reached."""
+        conn = self._try_get_existing_connection()
+        if conn is not None:
+            return conn
+
+        conn = self._create_new_connection()
+        if conn is not None:
+            return conn
+
+        return self._wait_for_connection()
 
     def release_connection(self, conn: Any) -> None:
         if conn.is_closed():
@@ -103,13 +124,15 @@ class SimpleConnectionPool:
 
 
 def _setup_database_session(conn: Any, db: str, schema: str) -> None:
+    cursor = None
     try:
         cursor = conn.cursor()
         cursor.execute(f'USE DATABASE "{db}"')
         if schema:
             cursor.execute(f'USE SCHEMA "{schema}"')
     finally:
-        cursor.close()
+        if cursor:
+            cursor.close()
 
 
 def _handle_connection_error(exc: Exception) -> None:
