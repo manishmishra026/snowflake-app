@@ -22,10 +22,6 @@ resource "azurerm_log_analytics_workspace_table" "custom_logs" {
   name              = var.custom_log_table_name
   plan              = "Analytics"
   retention_in_days = var.custom_log_table_retention_in_days
-
-  depends_on = [
-    azurerm_monitor_data_collection_rule.main
-  ]
 }
 
 # ==============================================================================
@@ -58,6 +54,11 @@ resource "azurerm_monitor_data_collection_rule" "main" {
   stream_declaration {
     stream_name = var.custom_log_stream_name
 
+    column {
+      name = "TimeGenerated"
+      type = "datetime"
+    }
+
     dynamic "column" {
       for_each = var.custom_log_columns
       content {
@@ -73,6 +74,10 @@ resource "azurerm_monitor_data_collection_rule" "main" {
     transform_kql = "source"
     output_stream = var.custom_log_stream_name
   }
+
+  depends_on = [
+    azurerm_log_analytics_workspace_table.custom_logs
+  ]
 
   tags = var.tags
 }
