@@ -3,7 +3,7 @@
 # Copy this file to terraform.tfvars and customize with your environment values.
 # ==============================================================================
 
-location     = "eastus"
+location     = "canadacentral"
 environment  = "dev"
 project_name = "snowflake"
 
@@ -20,8 +20,8 @@ data_collection_rule_name     = "dcr-snowflake-dev"
 action_group_name             = "ag-snowflake-dev"
 
 # Existing VNet and Subnet Details (Provided by user)
-vnet_name                = "vnet-existing-eastus"
-vnet_resource_group_name = "rg-network-eastus"
+vnet_name                = "vnet-existing-canadacentral"
+vnet_resource_group_name = "rg-network-canadacentral"
 agw_subnet_name          = "snet-agw"
 pe_subnet_name           = "snet-pe"
 app_subnet_name          = "snet-app"

@@ -2,7 +2,7 @@
 # Production Environment Configuration (prod.tfvars)
 # ==============================================================================
 
-location     = "eastus"
+location     = "canadacentral"
 environment  = "prod"
 project_name = "snowflake"
 
@@ -19,8 +19,8 @@ data_collection_rule_name     = "dcr-snowflake-prod"
 action_group_name             = "ag-snowflake-prod"
 
 # Existing VNet and Subnet Details
-vnet_name                = "vnet-prod-eastus"
-vnet_resource_group_name = "rg-network-prod"
+vnet_name                = "vnet-prod-canadacentral"
+vnet_resource_group_name = "rg-network-canadacentral"
 agw_subnet_name          = "snet-agw"
 pe_subnet_name           = "snet-pe"
 app_subnet_name          = "snet-app" # Shared outbound subnet for Web App & Function App
