@@ -16,17 +16,36 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 # ==============================================================================
 # Custom Log Analytics Table (BuybackWebAppAuditLogs_CL)
-# Note: Provisioned by Azure Monitor DCR, then retention is configured below.
+# Provisioned via ARM Template to establish table schema and retention before DCR creation.
 # ==============================================================================
-resource "azurerm_log_analytics_workspace_table" "custom_logs" {
-  workspace_id      = azurerm_log_analytics_workspace.main.id
-  name              = var.custom_log_table_name
-  plan              = "Analytics"
-  retention_in_days = var.custom_log_table_retention_in_days
+resource "azurerm_resource_group_template_deployment" "custom_log_table" {
+  name                = "deploy-table-${var.custom_log_table_name}"
+  resource_group_name = azurerm_resource_group.main.name
+  deployment_mode     = "Incremental"
 
-  depends_on = [
-    azurerm_monitor_data_collection_rule.main
-  ]
+  template_content = jsonencode({
+    "$schema"        = "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#"
+    "contentVersion" = "1.0.0.0"
+    "resources" = [
+      {
+        "type"       = "Microsoft.OperationalInsights/workspaces/tables"
+        "apiVersion" = "2022-10-01"
+        "name"       = "[concat('${azurerm_log_analytics_workspace.main.name}', '/${var.custom_log_table_name}')]"
+        "properties" = {
+          "plan"                 = "Analytics"
+          "retentionInDays"      = var.custom_log_table_retention_in_days
+          "totalRetentionInDays" = var.custom_log_table_retention_in_days
+          "schema" = {
+            "name" = var.custom_log_table_name
+            "columns" = concat(
+              [{ name = "TimeGenerated", type = "datetime" }],
+              [for col in var.custom_log_columns : { name = col.name, type = col.type }]
+            )
+          }
+        }
+      }
+    ]
+  })
 }
 
 # ==============================================================================
@@ -55,8 +74,6 @@ resource "azurerm_monitor_data_collection_rule" "main" {
     }
   }
 
-  data_sources {}
-
   stream_declaration {
     stream_name = var.custom_log_stream_name
 
@@ -80,6 +97,10 @@ resource "azurerm_monitor_data_collection_rule" "main" {
     transform_kql = "source"
     output_stream = var.custom_log_stream_name
   }
+
+  depends_on = [
+    azurerm_resource_group_template_deployment.custom_log_table
+  ]
 
   tags = var.tags
 }
