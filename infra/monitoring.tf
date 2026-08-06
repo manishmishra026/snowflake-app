@@ -95,25 +95,25 @@ resource "azurerm_monitor_action_group" "main" {
 }
 
 # ==============================================================================
-# Alerts & Monitoring Capabilities
+# Alerts & Monitoring Capabilities (14 Alert Rules per Specification)
 # ==============================================================================
 
-# Metric Alert 1: App Service HTTP 5xx Server Errors (Application Down / Failure)
-resource "azurerm_monitor_metric_alert" "app_service_5xx" {
-  name                = "alert-${azurerm_linux_web_app.main.name}-http5xx"
+# 1. Application Gateway: Failed Requests (> 0 in 5 minutes)
+resource "azurerm_monitor_metric_alert" "agw_failed_requests" {
+  name                = "alert-${azurerm_application_gateway.main.name}-failed-requests"
   resource_group_name = azurerm_resource_group.main.name
-  scopes              = [azurerm_linux_web_app.main.id]
-  description         = "Triggers when App Service experiences HTTP 5xx server errors or downtime."
+  scopes              = [azurerm_application_gateway.main.id]
+  description         = "Metric Alert - Failed Requests > 0 in 5 minutes"
   severity            = 1
   frequency           = "PT1M"
   window_size         = "PT5M"
 
   criteria {
-    metric_namespace = "Microsoft.Web/sites"
-    metric_name      = "Http5xx"
+    metric_namespace = "Microsoft.Network/applicationGateways"
+    metric_name      = "FailedRequests"
     aggregation      = "Total"
-    operator         = "GreaterThanOrEqual"
-    threshold        = 1
+    operator         = "GreaterThan"
+    threshold        = 0
   }
 
   action {
@@ -123,12 +123,43 @@ resource "azurerm_monitor_metric_alert" "app_service_5xx" {
   tags = var.tags
 }
 
-# Metric Alert 2: Application Gateway Unhealthy Host Count
-resource "azurerm_monitor_metric_alert" "agw_unhealthy_hosts" {
-  name                = "alert-${azurerm_application_gateway.main.name}-unhealthy-hosts"
+# 2. Application Gateway: High 5xx Errors (Response Status 5xx > 10 in 5 minutes)
+resource "azurerm_monitor_metric_alert" "agw_high_5xx" {
+  name                = "alert-${azurerm_application_gateway.main.name}-high-5xx"
   resource_group_name = azurerm_resource_group.main.name
   scopes              = [azurerm_application_gateway.main.id]
-  description         = "Triggers when Application Gateway detects an unhealthy backend host in the pool."
+  description         = "Metric Alert - Response Status 5xx > 10 in 5 minutes"
+  severity            = 1
+  frequency           = "PT1M"
+  window_size         = "PT5M"
+
+  criteria {
+    metric_namespace = "Microsoft.Network/applicationGateways"
+    metric_name      = "ResponseStatus"
+    aggregation      = "Total"
+    operator         = "GreaterThan"
+    threshold        = 10
+
+    dimension {
+      name     = "HttpStatusGroup"
+      operator = "Include"
+      values   = ["5xx"]
+    }
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 3. Application Gateway: Backend Unhealthy (Healthy Host Count below expected threshold < 1)
+resource "azurerm_monitor_metric_alert" "agw_backend_unhealthy" {
+  name                = "alert-${azurerm_application_gateway.main.name}-backend-unhealthy"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_application_gateway.main.id]
+  description         = "Metric Alert - Healthy Host Count below expected threshold (< 1)"
   severity            = 0
   frequency           = "PT1M"
   window_size         = "PT5M"
@@ -148,22 +179,216 @@ resource "azurerm_monitor_metric_alert" "agw_unhealthy_hosts" {
   tags = var.tags
 }
 
-# Metric Alert 3: Function App Execution Errors
-resource "azurerm_monitor_metric_alert" "function_app_errors" {
-  name                = "alert-${azurerm_linux_function_app.main.name}-function-errors"
+# 4. Application Gateway: High Backend Response Time (> 5 seconds)
+resource "azurerm_monitor_metric_alert" "agw_high_backend_response_time" {
+  name                = "alert-${azurerm_application_gateway.main.name}-high-backend-response-time"
   resource_group_name = azurerm_resource_group.main.name
-  scopes              = [azurerm_linux_function_app.main.id]
-  description         = "Triggers when Function App records execution failure count."
+  scopes              = [azurerm_application_gateway.main.id]
+  description         = "Metric Alert - Backend Response Time > 5 seconds"
+  severity            = 2
+  frequency           = "PT1M"
+  window_size         = "PT5M"
+
+  criteria {
+    metric_namespace = "Microsoft.Network/applicationGateways"
+    metric_name      = "BackendLastByteResponseTime"
+    aggregation      = "Average"
+    operator         = "GreaterThan"
+    threshold        = 5
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 5. App Service: HTTP 5xx Errors (HTTP 5xx Count > 10 in 5 minutes)
+resource "azurerm_monitor_metric_alert" "app_service_5xx_count" {
+  name                = "alert-${azurerm_linux_web_app.main.name}-http5xx-high"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_linux_web_app.main.id]
+  description         = "Metric Alert - HTTP 5xx Count > 10 in 5 minutes"
   severity            = 1
   frequency           = "PT1M"
   window_size         = "PT5M"
 
   criteria {
     metric_namespace = "Microsoft.Web/sites"
-    metric_name      = "FunctionExecutionErrors"
+    metric_name      = "Http5xx"
     aggregation      = "Total"
     operator         = "GreaterThan"
-    threshold        = 0
+    threshold        = 10
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 6. Storage Account: Capacity Utilization High (> 80%)
+resource "azurerm_monitor_metric_alert" "storage_capacity_high" {
+  name                = "alert-${azurerm_storage_account.main.name}-capacity-high"
+  resource_group_name = azurerm_resource_group.main.name
+  scopes              = [azurerm_storage_account.main.id]
+  description         = "Metric Alert - Capacity > 80%"
+  severity            = 2
+  frequency           = "PT1H"
+  window_size         = "PT1H"
+
+  criteria {
+    metric_namespace = "Microsoft.Storage/storageAccounts"
+    metric_name      = "UsedCapacity"
+    aggregation      = "Average"
+    operator         = "GreaterThan"
+    threshold        = var.storage_capacity_alert_threshold_bytes
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 7. Storage Account: Blob Deletion (Activity Log Alert - Delete Blob Operation Detected)
+resource "azurerm_monitor_activity_log_alert" "storage_blob_deletion" {
+  name                = "alert-${azurerm_storage_account.main.name}-blob-deletion"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "global"
+  scopes              = [azurerm_resource_group.main.id]
+  description         = "Activity Log Alert - Delete Blob Operation Detected"
+
+  criteria {
+    category       = "Administrative"
+    operation_name = "Microsoft.Storage/storageAccounts/blobServices/containers/blobs/delete"
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 8. Azure Resources: Resource Deletion (Activity Log Alert - Delete Resource Operation)
+resource "azurerm_monitor_activity_log_alert" "resource_deletion" {
+  name                = "alert-resource-group-deletion"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "global"
+  scopes              = [azurerm_resource_group.main.id]
+  description         = "Activity Log Alert - Delete Resource Operation"
+
+  criteria {
+    category       = "Administrative"
+    operation_name = "Microsoft.Resources/subscriptions/resourceGroups/delete"
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 9. Microsoft Defender for Cloud: Security Alert Generated (High Severity Alert Detected)
+resource "azurerm_monitor_activity_log_alert" "defender_security_alert" {
+  name                = "alert-security-high-severity"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "global"
+  scopes              = [azurerm_resource_group.main.id]
+  description         = "Security Alert - High Severity Alert Detected"
+
+  criteria {
+    category = "Security"
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 10, 11, 12. Subscription Cost: Budget 50%, 80%, 100% Reached
+resource "azurerm_consumption_budget_resource_group" "main" {
+  name              = "budget-${azurerm_resource_group.main.name}"
+  resource_group_id = azurerm_resource_group.main.id
+  amount            = var.monthly_budget_amount
+  time_grain        = "Monthly"
+
+  time_period {
+    start_date = formatdate("YYYY-MM-01'T'00:00:00'Z'", timestamp())
+  }
+
+  # Budget 50% Reached
+  notification {
+    enabled        = true
+    threshold      = 50
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = var.alert_email_addresses
+  }
+
+  # Budget 80% Reached
+  notification {
+    enabled        = true
+    threshold      = 80
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = var.alert_email_addresses
+  }
+
+  # Budget 100% Reached
+  notification {
+    enabled        = true
+    threshold      = 100
+    operator       = "GreaterThanOrEqualTo"
+    threshold_type = "Actual"
+    contact_emails = var.alert_email_addresses
+  }
+}
+
+# 13. Azure Service Health: Service Incident (Active Service Incident)
+resource "azurerm_monitor_activity_log_alert" "service_incident" {
+  name                = "alert-service-health-incident"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "global"
+  scopes              = [azurerm_resource_group.main.id]
+  description         = "Service Health Alert - Active Service Incident"
+
+  criteria {
+    category = "ServiceHealth"
+
+    service_health {
+      events = ["Incident"]
+    }
+  }
+
+  action {
+    action_group_id = azurerm_monitor_action_group.main.id
+  }
+
+  tags = var.tags
+}
+
+# 14. Azure Service Health: Planned Maintenance (Planned Maintenance Notification)
+resource "azurerm_monitor_activity_log_alert" "planned_maintenance" {
+  name                = "alert-service-health-planned-maintenance"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = "global"
+  scopes              = [azurerm_resource_group.main.id]
+  description         = "Service Health Alert - Planned Maintenance Notification"
+
+  criteria {
+    category = "ServiceHealth"
+
+    service_health {
+      events = ["Maintenance"]
+    }
   }
 
   action {
