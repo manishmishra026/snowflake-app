@@ -195,7 +195,6 @@ variable "custom_log_columns" {
   }))
   description = "Schema definitions for custom application log stream sent via DCE/DCR."
   default = [
-    { name = "TimeGenerated", type = "datetime" },
     { name = "action_type", type = "string" },
     { name = "actor_email", type = "string" },
     { name = "actor_user_id", type = "string" },
