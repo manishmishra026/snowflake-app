@@ -48,7 +48,6 @@ resource "azurerm_monitor_data_collection_rule" "main" {
   resource_group_name         = azurerm_resource_group.main.name
   location                    = azurerm_resource_group.main.location
   data_collection_endpoint_id = azurerm_monitor_data_collection_endpoint.main.id
-  kind                        = "Linux"
 
   destinations {
     log_analytics {
