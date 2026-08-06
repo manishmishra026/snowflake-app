@@ -40,7 +40,6 @@ custom_log_table_name  = "BuybackWebAppAuditLogs_CL"
 custom_log_stream_name = "Custom-BuybackWebAppAuditLogs_CL"
 
 custom_log_columns = [
-  { name = "TimeGenerated", type = "datetime" },
   { name = "action_type", type = "string" },
   { name = "actor_email", type = "string" },
   { name = "actor_user_id", type = "string" },

@@ -26,7 +26,7 @@ pe_subnet_name           = "snet-pe"
 app_subnet_name          = "snet-app" # Shared outbound subnet for Web App & Function App
 
 # Application Gateway Private Listener IP
-agw_private_ip_address = "10.1.1.10"
+agw_private_ip_address = "10.0.0.10"
 agw_sku_name           = "Standard_v2"
 agw_sku_tier           = "Standard_v2"
 agw_capacity           = 2
@@ -40,7 +40,6 @@ custom_log_table_name  = "BuybackWebAppAuditLogs_CL"
 custom_log_stream_name = "Custom-BuybackWebAppAuditLogs_CL"
 
 custom_log_columns = [
-  { name = "TimeGenerated", type = "datetime" },
   { name = "action_type", type = "string" },
   { name = "actor_email", type = "string" },
   { name = "actor_user_id", type = "string" },
