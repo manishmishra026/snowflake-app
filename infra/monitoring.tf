@@ -16,12 +16,17 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 # ==============================================================================
 # Custom Log Analytics Table (BuybackWebAppAuditLogs_CL)
+# Note: Provisioned by Azure Monitor DCR, then retention is configured below.
 # ==============================================================================
 resource "azurerm_log_analytics_workspace_table" "custom_logs" {
   workspace_id      = azurerm_log_analytics_workspace.main.id
   name              = var.custom_log_table_name
   plan              = "Analytics"
   retention_in_days = var.custom_log_table_retention_in_days
+
+  depends_on = [
+    azurerm_monitor_data_collection_rule.main
+  ]
 }
 
 # ==============================================================================
@@ -74,10 +79,6 @@ resource "azurerm_monitor_data_collection_rule" "main" {
     transform_kql = "source"
     output_stream = var.custom_log_stream_name
   }
-
-  depends_on = [
-    azurerm_log_analytics_workspace_table.custom_logs
-  ]
 
   tags = var.tags
 }
