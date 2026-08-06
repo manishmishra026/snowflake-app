@@ -37,7 +37,6 @@ resource "azurerm_monitor_data_collection_endpoint" "main" {
   name                          = local.dce_name
   resource_group_name           = azurerm_resource_group.main.name
   location                      = azurerm_resource_group.main.location
-  kind                          = "Linux"
   public_network_access_enabled = true
 
   tags = var.tags
@@ -55,6 +54,8 @@ resource "azurerm_monitor_data_collection_rule" "main" {
       name                  = "la-destination"
     }
   }
+
+  data_sources {}
 
   stream_declaration {
     stream_name = var.custom_log_stream_name
