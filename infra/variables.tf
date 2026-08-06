@@ -33,7 +33,13 @@ variable "tags" {
 # ==============================================================================
 variable "resource_group_name" {
   type        = string
-  description = "Name of the resource group. If blank, standard naming convention (rg-<project>-<env>) is used."
+  description = "Name of the main application resource group. If blank, standard naming convention (rg-<project>-<env>) is used."
+  default     = ""
+}
+
+variable "monitoring_resource_group_name" {
+  type        = string
+  description = "Name of the dedicated logging and monitoring resource group. If blank, standard naming convention (rg-<project>-<env>-monitoring) is used."
   default     = ""
 }
 
