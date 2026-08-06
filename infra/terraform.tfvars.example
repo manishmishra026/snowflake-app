@@ -9,6 +9,7 @@ project_name = "snowflake"
 
 # Naming Convention Overrides (Optional - leave empty strings to auto-generate based on naming rules)
 resource_group_name           = "rg-snowflake-dev"
+monitoring_resource_group_name = "rg-snowflake-monitoring-dev"
 app_service_plan_name         = "asp-snowflake-dev"
 app_service_name              = "app-snowflake-dev"
 function_app_name             = "func-snowflake-dev"

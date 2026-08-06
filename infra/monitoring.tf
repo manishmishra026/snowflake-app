@@ -1,4 +1,4 @@
-# Data source for current subscription (required for Service Health Activity Log Alert scope)
+# Current Subscription Data Source
 data "azurerm_subscription" "current" {}
 
 # ==============================================================================
@@ -6,8 +6,8 @@ data "azurerm_subscription" "current" {}
 # ==============================================================================
 resource "azurerm_log_analytics_workspace" "main" {
   name                = local.log_name
-  location            = azurerm_resource_group.main.location
-  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.monitoring.location
+  resource_group_name = azurerm_resource_group.monitoring.name
   sku                 = "PerGB2018"
   retention_in_days   = 30
 
@@ -16,11 +16,10 @@ resource "azurerm_log_analytics_workspace" "main" {
 
 # ==============================================================================
 # Custom Log Analytics Table (BuybackWebAppAuditLogs_CL)
-# Provisioned via ARM Template to establish table schema and retention before DCR creation.
 # ==============================================================================
 resource "azurerm_resource_group_template_deployment" "custom_log_table" {
   name                = "deploy-table-${var.custom_log_table_name}"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   deployment_mode     = "Incremental"
 
   template_content = jsonencode({
@@ -50,12 +49,12 @@ resource "azurerm_resource_group_template_deployment" "custom_log_table" {
 
 # ==============================================================================
 # Custom Logs Ingestion: Data Collection Endpoint (DCE) & Data Collection Rule (DCR)
-# Enables custom log streaming from application code/agents directly to Log Analytics.
+# Enables custom log streaming from application code directly to Log Analytics.
 # ==============================================================================
 resource "azurerm_monitor_data_collection_endpoint" "main" {
   name                          = local.dce_name
-  resource_group_name           = azurerm_resource_group.main.name
-  location                      = azurerm_resource_group.main.location
+  resource_group_name           = azurerm_resource_group.monitoring.name
+  location                      = azurerm_resource_group.monitoring.location
   public_network_access_enabled = true
 
   tags = var.tags
@@ -63,8 +62,8 @@ resource "azurerm_monitor_data_collection_endpoint" "main" {
 
 resource "azurerm_monitor_data_collection_rule" "main" {
   name                        = local.dcr_name
-  resource_group_name         = azurerm_resource_group.main.name
-  location                    = azurerm_resource_group.main.location
+  resource_group_name         = azurerm_resource_group.monitoring.name
+  location                    = azurerm_resource_group.monitoring.location
   data_collection_endpoint_id = azurerm_monitor_data_collection_endpoint.main.id
 
   destinations {
@@ -110,7 +109,7 @@ resource "azurerm_monitor_data_collection_rule" "main" {
 # ==============================================================================
 resource "azurerm_monitor_action_group" "main" {
   name                = local.ag_name
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   short_name          = "app-alerts"
 
   dynamic "email_receiver" {
@@ -132,7 +131,7 @@ resource "azurerm_monitor_action_group" "main" {
 # 1. Application Gateway: Failed Requests (> 0 in 5 minutes)
 resource "azurerm_monitor_metric_alert" "agw_failed_requests" {
   name                = "alert-${azurerm_application_gateway.main.name}-failed-requests"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   scopes              = [azurerm_application_gateway.main.id]
   description         = "Metric Alert - Failed Requests > 0 in 5 minutes"
   severity            = 1
@@ -157,7 +156,7 @@ resource "azurerm_monitor_metric_alert" "agw_failed_requests" {
 # 2. Application Gateway: High 5xx Errors (Response Status 5xx > 10 in 5 minutes)
 resource "azurerm_monitor_metric_alert" "agw_high_5xx" {
   name                = "alert-${azurerm_application_gateway.main.name}-high-5xx"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   scopes              = [azurerm_application_gateway.main.id]
   description         = "Metric Alert - Response Status 5xx > 10 in 5 minutes"
   severity            = 1
@@ -188,7 +187,7 @@ resource "azurerm_monitor_metric_alert" "agw_high_5xx" {
 # 3. Application Gateway: Backend Unhealthy (Healthy Host Count below expected threshold < 1)
 resource "azurerm_monitor_metric_alert" "agw_backend_unhealthy" {
   name                = "alert-${azurerm_application_gateway.main.name}-backend-unhealthy"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   scopes              = [azurerm_application_gateway.main.id]
   description         = "Metric Alert - Healthy Host Count below expected threshold (< 1)"
   severity            = 0
@@ -213,7 +212,7 @@ resource "azurerm_monitor_metric_alert" "agw_backend_unhealthy" {
 # 4. Application Gateway: High Backend Response Time (> 5 seconds)
 resource "azurerm_monitor_metric_alert" "agw_high_backend_response_time" {
   name                = "alert-${azurerm_application_gateway.main.name}-high-backend-response-time"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   scopes              = [azurerm_application_gateway.main.id]
   description         = "Metric Alert - Backend Response Time > 5 seconds"
   severity            = 2
@@ -238,7 +237,7 @@ resource "azurerm_monitor_metric_alert" "agw_high_backend_response_time" {
 # 5. App Service: HTTP 5xx Errors (HTTP 5xx Count > 10 in 5 minutes)
 resource "azurerm_monitor_metric_alert" "app_service_5xx_count" {
   name                = "alert-${azurerm_linux_web_app.main.name}-http5xx-high"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   scopes              = [azurerm_linux_web_app.main.id]
   description         = "Metric Alert - HTTP 5xx Count > 10 in 5 minutes"
   severity            = 1
@@ -263,7 +262,7 @@ resource "azurerm_monitor_metric_alert" "app_service_5xx_count" {
 # 6. Storage Account: Capacity Utilization High (> 80%)
 resource "azurerm_monitor_metric_alert" "storage_capacity_high" {
   name                = "alert-${azurerm_storage_account.main.name}-capacity-high"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   scopes              = [azurerm_storage_account.main.id]
   description         = "Metric Alert - Capacity > 80%"
   severity            = 2
@@ -288,7 +287,7 @@ resource "azurerm_monitor_metric_alert" "storage_capacity_high" {
 # 7. Storage Account: Blob Deletion (Activity Log Alert - Delete Blob Operation Detected)
 resource "azurerm_monitor_activity_log_alert" "storage_blob_deletion" {
   name                = "alert-${azurerm_storage_account.main.name}-blob-deletion"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   location            = "global"
   scopes              = [azurerm_resource_group.main.id]
   description         = "Activity Log Alert - Delete Blob Operation Detected"
@@ -308,7 +307,7 @@ resource "azurerm_monitor_activity_log_alert" "storage_blob_deletion" {
 # 8. Azure Resources: Resource Deletion (Activity Log Alert - Delete Resource Operation)
 resource "azurerm_monitor_activity_log_alert" "resource_deletion" {
   name                = "alert-resource-group-deletion"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   location            = "global"
   scopes              = [azurerm_resource_group.main.id]
   description         = "Activity Log Alert - Delete Resource Operation"
@@ -328,7 +327,7 @@ resource "azurerm_monitor_activity_log_alert" "resource_deletion" {
 # 9. Microsoft Defender for Cloud: Security Alert Generated (High Severity Alert Detected)
 resource "azurerm_monitor_activity_log_alert" "defender_security_alert" {
   name                = "alert-security-high-severity"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   location            = "global"
   scopes              = [azurerm_resource_group.main.id]
   description         = "Security Alert - High Severity Alert Detected"
@@ -386,7 +385,7 @@ resource "azurerm_consumption_budget_resource_group" "main" {
 # 13. Azure Service Health: Service Incident (Active Service Incident)
 resource "azurerm_monitor_activity_log_alert" "service_incident" {
   name                = "alert-service-health-incident"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   location            = "global"
   scopes              = [data.azurerm_subscription.current.id]
   description         = "Service Health Alert - Active Service Incident"
@@ -409,7 +408,7 @@ resource "azurerm_monitor_activity_log_alert" "service_incident" {
 # 14. Azure Service Health: Planned Maintenance (Planned Maintenance Notification)
 resource "azurerm_monitor_activity_log_alert" "planned_maintenance" {
   name                = "alert-service-health-planned-maintenance"
-  resource_group_name = azurerm_resource_group.main.name
+  resource_group_name = azurerm_resource_group.monitoring.name
   location            = "global"
   scopes              = [data.azurerm_subscription.current.id]
   description         = "Service Health Alert - Planned Maintenance Notification"
