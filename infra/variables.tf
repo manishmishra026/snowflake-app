@@ -220,3 +220,15 @@ variable "alert_email_addresses" {
   description = "List of email addresses to receive alert notifications via Action Group."
   default     = []
 }
+
+variable "monthly_budget_amount" {
+  type        = number
+  description = "Monthly budget amount for cost alerting (50%, 80%, 100% threshold notifications)."
+  default     = 500
+}
+
+variable "storage_capacity_alert_threshold_bytes" {
+  type        = number
+  description = "Storage capacity alert threshold in bytes (default 80GB = 85899345920 bytes)."
+  default     = 85899345920
+}

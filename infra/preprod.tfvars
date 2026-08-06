@@ -19,8 +19,8 @@ data_collection_rule_name     = "dcr-snowflake-preprod"
 action_group_name             = "ag-snowflake-preprod"
 
 # Existing VNet and Subnet Details
-vnet_name                = "vnet-preprod-eastus"
-vnet_resource_group_name = "rg-network-preprod"
+vnet_name                = "vnet-existing-eastus"
+vnet_resource_group_name = "rg-network-eastus"
 agw_subnet_name          = "snet-agw"
 pe_subnet_name           = "snet-pe"
 app_subnet_name          = "snet-app" # Shared outbound subnet for Web App & Function App
